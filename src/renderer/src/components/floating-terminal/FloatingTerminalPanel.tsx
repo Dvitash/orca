@@ -74,6 +74,7 @@ import type {
   TabGroup,
   TerminalTab
 } from '../../../../shared/types'
+import { resolveUnifiedTabLabel } from '../../../../shared/tab-title-resolution'
 import { FloatingTerminalOrchestrationDialog } from './FloatingTerminalOrchestrationDialog'
 import { FloatingTerminalResizeHandles } from './FloatingTerminalResizeHandles'
 import { FloatingTerminalWindowControls } from './FloatingTerminalWindowControls'
@@ -166,6 +167,7 @@ export function FloatingTerminalPanel({
   const openFile = useAppStore((s) => s.openFile)
   const browserDefaultUrl = useAppStore((s) => s.browserDefaultUrl)
   const floatingTerminalCwd = useAppStore((s) => s.settings?.floatingTerminalCwd ?? '')
+  const generatedTabTitlesEnabled = useAppStore((s) => s.settings?.tabAutoGenerateTitle === true)
   const newTerminalShortcutKeys = useShortcutKeys('tab.newTerminal')
   const newBrowserShortcutKeys = useShortcutKeys('tab.newBrowser')
   const newMarkdownShortcutKeys = useShortcutKeys('tab.newMarkdown')
@@ -246,24 +248,35 @@ export function FloatingTerminalPanel({
       ? activeTab.entityId
       : null
   const terminalTabById = useMemo(() => new Map(tabs.map((tab) => [tab.id, tab])), [tabs])
-  const terminalItems = useMemo(
+  const terminalItems = useMemo<(TerminalTab & { unifiedTabId: string })[]>(
     () =>
       groupTabs
         .filter((tab) => tab.contentType === 'terminal')
-        .map((tab) => {
+        .flatMap((tab): (TerminalTab & { unifiedTabId: string })[] => {
           const terminalTab = terminalTabById.get(tab.entityId)
-          return terminalTab
-            ? {
-                ...terminalTab,
-                unifiedTabId: tab.id,
-                title: tab.label,
-                customTitle: tab.customLabel ?? terminalTab.customTitle,
-                color: tab.color ?? terminalTab.color
-              }
-            : null
-        })
-        .filter((tab): tab is TerminalTab & { unifiedTabId: string } => tab !== null),
-    [groupTabs, terminalTabById]
+          if (!terminalTab) {
+            return []
+          }
+
+          return [
+            {
+              ...terminalTab,
+              unifiedTabId: tab.id,
+              title: resolveUnifiedTabLabel(
+                {
+                  ...tab,
+                  generatedLabel: tab.generatedLabel ?? terminalTab.generatedTitle
+                },
+                generatedTabTitlesEnabled,
+                tab.label
+              ),
+              generatedTitle: terminalTab.generatedTitle ?? tab.generatedLabel ?? null,
+              customTitle: tab.customLabel ?? terminalTab.customTitle,
+              color: tab.color ?? terminalTab.color
+            }
+          ]
+        }),
+    [generatedTabTitlesEnabled, groupTabs, terminalTabById]
   )
   const browserItems = useMemo(
     () =>

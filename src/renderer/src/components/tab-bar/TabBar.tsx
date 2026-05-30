@@ -13,6 +13,7 @@ import type {
   TuiAgent,
   WorkspaceVisibleTabType
 } from '../../../../shared/types'
+import { resolveTerminalTabTitle } from '../../../../shared/tab-title-resolution'
 import { useAppStore } from '../../store'
 import { buildStatusMap } from '../right-sidebar/status-display'
 import type { OpenFile } from '../../store/slices/editor'
@@ -115,9 +116,9 @@ type TabItem =
       data: BrowserTabState & { tabId?: string }
     }
 
-function getTabDragLabel(item: TabItem): string {
+function getTabDragLabel(item: TabItem, generatedTitlesEnabled: boolean): string {
   if (item.type === 'terminal') {
-    return item.data.customTitle ?? item.data.title
+    return resolveTerminalTabTitle(item.data, generatedTitlesEnabled, item.data.title)
   }
   if (item.type === 'browser') {
     return getBrowserTabLabel(item.data)
@@ -165,6 +166,7 @@ function TabBarInner({
   const newTerminalShortcut = useShortcutLabel('tab.newTerminal')
   const newBrowserShortcut = useShortcutLabel('tab.newBrowser')
   const newFileShortcut = useShortcutLabel('tab.newMarkdown')
+  const generatedTabTitlesEnabled = useAppStore((s) => s.settings?.tabAutoGenerateTitle === true)
   const gitStatusEntries = useAppStore(
     (s) => s.gitStatusByWorktree[worktreeId] ?? EMPTY_GIT_STATUS_ENTRIES
   )
@@ -551,15 +553,23 @@ function TabBarInner({
               unifiedTabId: item.unifiedTabId,
               visibleTabId: item.id,
               tabType: item.type,
-              label: getTabDragLabel(item),
+              label: getTabDragLabel(item, generatedTabTitlesEnabled),
               iconPath: item.type === 'editor' ? item.data.filePath : undefined,
               color: item.type === 'terminal' ? (item.data.color ?? null) : null
             }
             if (item.type === 'terminal') {
+              const terminalTab = {
+                ...item.data,
+                title: resolveTerminalTabTitle(
+                  item.data,
+                  generatedTabTitlesEnabled,
+                  item.data.title
+                )
+              }
               return (
                 <SortableTab
                   key={item.id}
-                  tab={item.data}
+                  tab={terminalTab}
                   tabCount={orderedItems.length}
                   hasTabsToRight={index < orderedItems.length - 1}
                   isActive={activeTabType === 'terminal' && item.id === activeTabId}
