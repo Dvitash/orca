@@ -3895,7 +3895,9 @@
           "0dc4d1b657": "クローン先のサーバー パスを入力します。"
         },
         "useAddRepoLocalFolderFlow": {
-          "7ab10e4974": "サーバー パスを使用して、リモート ランタイムからプロジェクトを追加します。"
+          "7ab10e4974": "サーバー パスを使用して、リモート ランタイムからプロジェクトを追加します。",
+          "skippedBatchFolders": "一部のフォルダーはスキップされました",
+          "skippedBatchFoldersDescription": "スキップされたフォルダーは個別に追加して確認または確定してください。"
         },
         "useAddRepoNestedImportFlow": {
           "680cac2c82": "{{value0}} は失敗しました",
