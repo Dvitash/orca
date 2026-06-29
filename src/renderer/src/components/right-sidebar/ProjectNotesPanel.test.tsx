@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { act } from 'react'
+import { StrictMode, act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ProjectNotesPanel from './ProjectNotesPanel'
@@ -80,12 +80,19 @@ function setNativeTextareaValue(textarea: HTMLTextAreaElement, nextValue: string
   valueSetter.call(textarea, nextValue)
 }
 
-async function renderPanel(): Promise<void> {
+async function renderPanel(options: { strictMode?: boolean } = {}): Promise<void> {
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
+  const panel = options.strictMode ? (
+    <StrictMode>
+      <ProjectNotesPanel />
+    </StrictMode>
+  ) : (
+    <ProjectNotesPanel />
+  )
   await act(async () => {
-    root?.render(<ProjectNotesPanel />)
+    root?.render(panel)
   })
   await flushMicrotasks()
 }
@@ -149,6 +156,12 @@ describe('ProjectNotesPanel', () => {
 
   it('renders existing project notes in the textarea', async () => {
     await renderPanel()
+
+    expect(getTextarea().value).toBe('existing notes')
+  })
+
+  it('renders existing notes after StrictMode replays mount effects', async () => {
+    await renderPanel({ strictMode: true })
 
     expect(getTextarea().value).toBe('existing notes')
   })

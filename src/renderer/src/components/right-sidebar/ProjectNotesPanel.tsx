@@ -166,6 +166,9 @@ export default function ProjectNotesPanel(): JSX.Element {
   )
 
   useEffect(() => {
+    // Why: StrictMode replays mount effects; re-arm this ref so async reads are not
+    // treated as stale after the development-only cleanup pass.
+    mountedRef.current = true
     return () => {
       mountedRef.current = false
     }
