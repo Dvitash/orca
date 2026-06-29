@@ -13,6 +13,7 @@ import { clearRuntimeCompatibilityCacheForTests } from './runtime-rpc-client'
 
 const fsReadFile = vi.fn()
 const fsWriteFile = vi.fn()
+const fsPathExists = vi.fn()
 const runtimeEnvironmentCall = vi.fn()
 const runtimeEnvironmentTransportCall = vi.fn()
 
@@ -26,6 +27,8 @@ beforeEach(() => {
   clearRuntimeCompatibilityCacheForTests()
   fsReadFile.mockReset()
   fsWriteFile.mockReset()
+  fsPathExists.mockReset()
+  fsPathExists.mockResolvedValue(true)
   runtimeEnvironmentCall.mockReset()
   runtimeEnvironmentTransportCall.mockReset()
   runtimeEnvironmentTransportCall.mockImplementation((args: { method: string }) => {
@@ -46,7 +49,8 @@ beforeEach(() => {
     api: {
       fs: {
         readFile: fsReadFile,
-        writeFile: fsWriteFile
+        writeFile: fsWriteFile,
+        pathExists: fsPathExists
       },
       runtimeEnvironments: {
         call: runtimeEnvironmentTransportCall
@@ -70,6 +74,10 @@ describe('project notes client', () => {
       filePath: 'C:\\Users\\dvita\\orca\\workspaces\\Verde\\notes.md'
     })
 
+    expect(fsPathExists).toHaveBeenCalledWith({
+      filePath: 'C:\\Users\\dvita\\orca\\workspaces\\Verde\\notes.md',
+      connectionId: undefined
+    })
     expect(fsReadFile).toHaveBeenCalledWith({
       filePath: 'C:\\Users\\dvita\\orca\\workspaces\\Verde\\notes.md',
       connectionId: undefined
@@ -94,15 +102,17 @@ describe('project notes client', () => {
     })
   })
 
-  it('treats a missing notes file as a blank document', async () => {
-    const error = Object.assign(new Error('ENOENT: no such file or directory, open notes.md'), {
-      code: 'ENOENT'
-    })
-    fsReadFile.mockRejectedValue(error)
-
+  it('creates a blank notes file when the workspace notes file is missing', async () => {
+    fsPathExists.mockResolvedValue(false)
     await expect(readProjectNotes(localContext)).resolves.toEqual({
       content: '',
       filePath: 'C:\\Users\\dvita\\orca\\workspaces\\Verde\\notes.md'
+    })
+    expect(fsReadFile).not.toHaveBeenCalled()
+    expect(fsWriteFile).toHaveBeenCalledWith({
+      filePath: 'C:\\Users\\dvita\\orca\\workspaces\\Verde\\notes.md',
+      content: '',
+      connectionId: undefined
     })
   })
 

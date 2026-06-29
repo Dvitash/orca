@@ -269,7 +269,7 @@ export default function ProjectNotesPanel(): JSX.Element {
       : null
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-2 bg-editor-surface p-3">
       <textarea
         aria-label={translate(
           'auto.components.right.sidebar.ProjectNotesPanel.projectNotesLabel',
@@ -278,13 +278,9 @@ export default function ProjectNotesPanel(): JSX.Element {
         value={displayedContent}
         onChange={handleChange}
         onBlur={handleBlur}
-        placeholder={translate(
-          'auto.components.right.sidebar.ProjectNotesPanel.placeholder',
-          'Commands, todos, testing reminders...'
-        )}
         spellCheck={false}
         disabled={!isDocumentUsable}
-        className="min-h-0 flex-1 resize-none rounded-md border border-border bg-editor-surface p-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-70"
+        className="min-h-0 flex-1 resize-none border-0 bg-transparent p-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-70"
       />
       <div className="min-h-5">
         {footerMessage && (

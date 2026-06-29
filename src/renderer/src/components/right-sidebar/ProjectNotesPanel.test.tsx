@@ -130,6 +130,14 @@ describe('ProjectNotesPanel', () => {
     expect(getTextarea().value).toBe('existing notes')
   })
 
+  it('renders without placeholder copy or an outlined textarea', async () => {
+    await renderPanel()
+
+    expect(getTextarea().getAttribute('placeholder')).toBeNull()
+    expect(getTextarea().className).toContain('border-0')
+    expect(getTextarea().className).toContain('focus-visible:ring-0')
+  })
+
   it('autosaves edits after the debounce delay', async () => {
     await renderPanel()
 

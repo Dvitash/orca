@@ -1,6 +1,6 @@
 import type { GlobalSettings } from '../../../shared/types'
 import { joinPath } from '../lib/path'
-import { readRuntimeFileContent, writeRuntimeFile } from './runtime-file-client'
+import { readRuntimeFileContent, runtimePathExists, writeRuntimeFile } from './runtime-file-client'
 
 export const PROJECT_NOTES_FILE_NAME = 'notes.md'
 
@@ -23,8 +23,18 @@ export async function readProjectNotes(
   context: ProjectNotesOperationContext
 ): Promise<ProjectNotesDocument> {
   const filePath = getProjectNotesFilePath(context.worktreePath)
+  const operationContext = {
+    settings: context.settings,
+    worktreeId: context.worktreeId,
+    worktreePath: context.worktreePath,
+    connectionId: context.connectionId
+  }
 
   try {
+    if (!(await runtimePathExists(operationContext, filePath))) {
+      await writeProjectNotes(context, '')
+      return { content: '', filePath }
+    }
     const document = await readRuntimeFileContent({
       settings: context.settings,
       filePath,
@@ -35,6 +45,7 @@ export async function readProjectNotes(
     return { content: document.content, filePath }
   } catch (error) {
     if (isMissingProjectNotesFileError(error)) {
+      await writeProjectNotes(context, '')
       return { content: '', filePath }
     }
     throw error
@@ -73,7 +84,7 @@ function isMissingProjectNotesFileError(error: unknown): boolean {
   }
   const normalizedMessage = message.toLowerCase()
 
-  // Why: first open should start from a blank notes.md instead of surfacing ENOENT.
+  // Why: first open should create a blank notes.md instead of leaving a missing file.
   return (
     code === 'ENOENT' ||
     normalizedMessage.includes('enoent') ||
