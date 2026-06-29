@@ -66,6 +66,10 @@ function hasIdleSuffix(title: string, sourceProfile: SyntheticAgentTitleProfile)
   )
 }
 
+/**
+ * Why: remote OMP surfaces may report Pi as the live status identity, while
+ * launch ownership still identifies the user-selected agent.
+ */
 export function resolveCompatibleAgentTypeForOwner(
   incomingAgentType: AgentType | null | undefined,
   ownerAgentType: AgentType | null | undefined
@@ -85,6 +89,10 @@ export function resolveCompatibleAgentTypeForOwner(
   return ownerAgentType as AgentType
 }
 
+/**
+ * Why: Pi-compatible title frames can come from the wrapped harness during
+ * active work, so render them through the stable owner profile.
+ */
 export function normalizeCompatibleAgentTitleForOwner(
   title: string,
   ownerAgentType: AgentType | null | undefined
@@ -119,6 +127,10 @@ export function normalizeCompatibleAgentTitleForOwner(
   return ownerProfile.workingLabel
 }
 
+/**
+ * Why: mirrored remote status entries must keep the owner and title in sync
+ * or later snapshots repaint the same tab under the wrapper agent.
+ */
 export function normalizeCompatibleAgentStatusEntryForOwner(
   entry: AgentStatusEntry,
   ownerAgentType: AgentType | null | undefined
