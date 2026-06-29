@@ -17,6 +17,10 @@ import type {
   TerminalPaneLayoutNode,
   TerminalTab
 } from '../../../../shared/types'
+import {
+  normalizeCompatibleAgentTitleForOwner,
+  resolveCompatibleAgentTypeForOwner
+} from '../../../../shared/agent-title-owner'
 
 const EMPTY_RUNTIME_TITLES: Record<string, Record<number, string>> = {}
 const EMPTY_LIVE_PTY_IDS: Record<string, string[]> = {}
@@ -36,7 +40,8 @@ const TITLE_AGENT_LABEL_TO_TYPE: Record<string, AgentType> = {
   Cursor: 'cursor',
   Droid: 'droid',
   Hermes: 'hermes',
-  Pi: 'pi'
+  Pi: 'pi',
+  OMP: 'omp'
 }
 
 const CLAUDE_AGENT_TOKEN_RE = /(?<![\w./\\-])claude(?![\w./\\-])/i
@@ -121,12 +126,13 @@ function buildTitleDerivedAgentRow(args: {
   now: number
   runtimeAgentOrchestrationByPaneKey?: Record<string, AgentStatusOrchestrationContext>
 }): DashboardAgentRow | null {
-  const isClaudeAgentsTitle = isClaudeManagementTitle(args.title)
+  const title = normalizeCompatibleAgentTitleForOwner(args.title, args.tab.launchAgent)
+  const isClaudeAgentsTitle = isClaudeManagementTitle(title)
   // Why: `claude agents` is a live Claude Code Agent Teams surface, but the
   // shared detector keeps it neutral so runtime liveness probes do not treat
   // the management/list screen as active work.
-  const status = isClaudeAgentsTitle ? 'idle' : detectAgentStatusFromTitle(args.title)
-  const label = isClaudeAgentsTitle ? 'Claude Code' : getAgentLabel(args.title)
+  const status = isClaudeAgentsTitle ? 'idle' : detectAgentStatusFromTitle(title)
+  const label = isClaudeAgentsTitle ? 'Claude Code' : getAgentLabel(title)
   if (!status || !label) {
     return null
   }
@@ -135,7 +141,7 @@ function buildTitleDerivedAgentRow(args: {
   }
   const paneKey = makePaneKey(args.tab.id, args.leafId)
   const orchestration = args.runtimeAgentOrchestrationByPaneKey?.[paneKey]
-  const agentType = isClaudeAgentsTitle ? 'claude' : resolveTitleDerivedAgentType(args.title, label)
+  const agentType = isClaudeAgentsTitle ? 'claude' : resolveTitleDerivedAgentType(title, label)
   if (!agentType) {
     return null
   }
@@ -151,7 +157,7 @@ function buildTitleDerivedAgentRow(args: {
     stateStartedAt: args.now,
     stateHistory: [],
     agentType,
-    terminalTitle: args.title,
+    terminalTitle: title,
     lastAssistantMessage: secondary,
     ...(orchestration ? { orchestration } : {})
   }
@@ -178,13 +184,20 @@ export function resolveTitleDerivedAgentType(title: string, label: string): Agen
 }
 
 export function resolveAgentTypeFromTerminalTitle(
-  title: string | null | undefined
+  title: string | null | undefined,
+  ownerAgentType?: AgentType | null
 ): AgentType | null {
   if (!title) {
     return null
   }
-  const label = getAgentLabel(title)
-  return label ? resolveTitleDerivedAgentType(title, label) : null
+  const normalizedTitle = normalizeCompatibleAgentTitleForOwner(title, ownerAgentType)
+  const label = getAgentLabel(normalizedTitle)
+  return label
+    ? (resolveCompatibleAgentTypeForOwner(
+        resolveTitleDerivedAgentType(normalizedTitle, label),
+        ownerAgentType
+      ) ?? null)
+    : null
 }
 
 function titleStatusToRowState(
