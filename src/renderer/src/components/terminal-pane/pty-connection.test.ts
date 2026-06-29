@@ -52,7 +52,10 @@ function leafIdForPane(paneId: number): string {
 
 type StoreState = {
   activeWorktreeId: string | null
-  tabsByWorktree: Record<string, { id: string; ptyId: string | null; title?: string }[]>
+  tabsByWorktree: Record<
+    string,
+    { id: string; ptyId: string | null; title?: string; launchAgent?: string }[]
+  >
   ptyIdsByTabId?: Record<string, string[]>
   terminalLayoutsByTabId?: Record<string, TerminalLayoutSnapshot>
   unreadTerminalTabs?: Record<string, true>
@@ -9154,40 +9157,54 @@ describe('connectPanePty', () => {
     expect(deps.updateTabTitle).toHaveBeenCalledWith('tab-1', 'Codex - action required')
   })
 
-  it('resolves synthetic terminal titles for remote hook status updates', async () => {
+  it('normalizes Pi-compatible remote titles to authoritative OMP launch identity', async () => {
     const { connectPanePty } = await import('./pty-connection')
-    const transport = createMockTransport('pty-devin')
+    const transport = createMockTransport('pty-omp')
     transportFactoryQueue.push(transport)
     enableActiveRuntimeEnvironment()
-    mockStoreState.runtimePaneTitlesByTabId = { 'tab-1': { 1: '\u280b Devin' } }
+    mockStoreState.tabsByWorktree = {
+      'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty', launchAgent: 'omp' }]
+    }
+    mockStoreState.runtimePaneTitlesByTabId = { 'tab-1': { 1: '\u280b Pi' } }
 
     const pane = createPane(1)
     const manager = createManager(1)
+    manager.getActivePane.mockReturnValue({ id: 1 })
     const deps = createDeps()
 
     connectPanePty(pane as never, manager as never, deps as never)
 
+    const titleHandler = createdTransportOptions[0]?.onTitleChange as
+      | ((title: string, rawTitle: string) => void)
+      | undefined
+    if (!titleHandler) {
+      throw new Error('Expected onTitleChange to be registered')
+    }
+    titleHandler('\u280b Pi', '\u280b Pi')
+    expect(deps.setRuntimePaneTitle).toHaveBeenCalledWith('tab-1', 1, '\u280b OMP')
+    expect(deps.updateTabTitle).toHaveBeenCalledWith('tab-1', '\u280b OMP')
+
     const statusHandler = createdTransportOptions[0]?.onAgentStatus as
-      | ((payload: { state: 'done'; prompt: string; agentType: 'devin' }) => void)
+      | ((payload: { state: 'working'; prompt: string; agentType: 'pi' }) => void)
       | undefined
     if (!statusHandler) {
       throw new Error('Expected onAgentStatus to be registered')
     }
 
     statusHandler({
-      state: 'done',
-      prompt: 'finish the implementation',
-      agentType: 'devin'
+      state: 'working',
+      prompt: 'fix the remote title',
+      agentType: 'pi'
     })
 
     expect(mockStoreState.setAgentStatus).toHaveBeenCalledWith(
       makePaneKey('tab-1', LEAF_1),
       {
-        state: 'done',
-        prompt: 'finish the implementation',
-        agentType: 'devin'
+        state: 'working',
+        prompt: 'fix the remote title',
+        agentType: 'omp'
       },
-      'Devin ready'
+      '\u280b OMP'
     )
   })
 

@@ -132,6 +132,10 @@ import {
   type ResumableTuiAgent,
   type SleepingAgentSessionRecord
 } from '../../../../shared/agent-session-resume'
+import {
+  normalizeCompatibleAgentTitleForOwner,
+  resolveCompatibleAgentTypeForOwner
+} from '../../../../shared/agent-title-owner'
 import type { TuiAgent } from '../../../../shared/types'
 import { isWslUncPath } from '../../../../shared/wsl-paths'
 
@@ -973,6 +977,13 @@ export function connectPanePty(
     )
     return tab?.defaultTitle?.trim() || 'Terminal'
   }
+  const getAuthoritativePaneAgent = (): TuiAgent | undefined => {
+    const state = useAppStore.getState()
+    const tab = (state.tabsByWorktree[deps.worktreeId] ?? []).find(
+      (entry) => entry.id === deps.tabId
+    )
+    return tab?.launchAgent ?? paneStartup?.launchAgent ?? paneStartup?.initialAgentStatus?.agent
+  }
   const clearInferredInterruptWorkingTitle = (): void => {
     const state = useAppStore.getState()
     const currentTitle = state.runtimePaneTitlesByTabId?.[deps.tabId]?.[pane.id]
@@ -1385,8 +1396,9 @@ export function connectPanePty(
   let allowInitialIdleCacheSeed = false
 
   const onTitleChange = (title: string, rawTitle: string): void => {
+    const paneTitle = normalizeCompatibleAgentTitleForOwner(title, getAuthoritativePaneAgent())
     if (
-      shouldSuppressCodexAutoApprovalSyntheticTitle(title, {
+      shouldSuppressCodexAutoApprovalSyntheticTitle(paneTitle, {
         paneKey: cacheKey,
         tabId: deps.tabId,
         ...(launchToken ? { launchToken } : {})
@@ -1395,7 +1407,7 @@ export function connectPanePty(
       return
     }
     manager.setPaneGpuRendering(pane.id, !isGeminiTerminalTitle(rawTitle))
-    deps.setRuntimePaneTitle(deps.tabId, pane.id, title)
+    deps.setRuntimePaneTitle(deps.tabId, pane.id, paneTitle)
     if (syncAgentTaskCompleteTrackingEnabled()) {
       agentCompletionCoordinator.observeTitle(rawTitle)
     }
@@ -1405,7 +1417,7 @@ export function connectPanePty(
     // focus changes, onActivePaneChange syncs the newly active pane's stored
     // title to the tab.
     if (manager.getActivePane()?.id === pane.id) {
-      deps.updateTabTitle(deps.tabId, title)
+      deps.updateTabTitle(deps.tabId, paneTitle)
     }
 
     if (!hasConsideredInitialCacheTimerSeed) {
@@ -1432,7 +1444,10 @@ export function connectPanePty(
     const statusPayload = {
       state: 'working' as const,
       prompt: initialStatus.prompt,
-      agentType: initialStatus.agent
+      agentType: resolveCompatibleAgentTypeForOwner(
+        initialStatus.agent,
+        getAuthoritativePaneAgent()
+      )
     }
     if (paneStartup.launchConfig) {
       useAppStore
@@ -1903,20 +1918,39 @@ export function connectPanePty(
             // be stored against a title that was never paired with it.
             const currentState = useAppStore.getState()
             const title = currentState.runtimePaneTitlesByTabId?.[deps.tabId]?.[pane.id]
-            const statusTitle = resolveAgentStatusTerminalTitle(payload, title)
+            const agentType = resolveCompatibleAgentTypeForOwner(
+              payload.agentType,
+              getAuthoritativePaneAgent()
+            )
+            const statusPayload =
+              agentType === payload.agentType ? payload : { ...payload, agentType }
+            const resolvedStatusTitle = resolveAgentStatusTerminalTitle(statusPayload, title)
+            const statusTitle = resolvedStatusTitle
+              ? normalizeCompatibleAgentTitleForOwner(
+                  resolvedStatusTitle,
+                  agentType ?? getAuthoritativePaneAgent()
+                )
+              : resolvedStatusTitle
             if (launchToken) {
-              currentState.setAgentStatus(cacheKey, payload, statusTitle, undefined, undefined, {
-                launchToken
-              })
+              currentState.setAgentStatus(
+                cacheKey,
+                statusPayload,
+                statusTitle,
+                undefined,
+                undefined,
+                {
+                  launchToken
+                }
+              )
             } else {
-              currentState.setAgentStatus(cacheKey, payload, statusTitle)
+              currentState.setAgentStatus(cacheKey, statusPayload, statusTitle)
             }
             if (syncAgentTaskCompleteTrackingEnabled()) {
               const storedStatus = useAppStore.getState().agentStatusByPaneKey[cacheKey]
               const notificationPayload =
                 typeof storedStatus?.stateStartedAt === 'number'
-                  ? { ...payload, stateStartedAt: storedStatus.stateStartedAt }
-                  : payload
+                  ? { ...statusPayload, stateStartedAt: storedStatus.stateStartedAt }
+                  : statusPayload
               agentCompletionCoordinator.observeHookStatus(notificationPayload)
             }
             if (payload.state === 'working' && pendingTerminalBellNotification) {

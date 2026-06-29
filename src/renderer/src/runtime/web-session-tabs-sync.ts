@@ -43,6 +43,10 @@ import {
   toWebTerminalSurfaceTabId,
   WEB_TERMINAL_SURFACE_TAB_PREFIX
 } from './web-runtime-session'
+import {
+  normalizeCompatibleAgentStatusEntryForOwner,
+  normalizeCompatibleAgentTitleForOwner
+} from '../../../shared/agent-title-owner'
 import { resolveTerminalLayoutRoot } from './remote-terminal-layout-resolution'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 import { clearWebSessionFocusIntent, peekWebSessionFocusIntent } from './web-session-focus-intent'
@@ -511,7 +515,12 @@ function buildMirroredTerminalTabs(
     const ptyIds = surfaces
       .map((surface) => ptyIdsByLeafId[surface.leafId]!)
       .filter((ptyId): ptyId is string => typeof ptyId === 'string' && ptyId.length > 0)
-    const title = activeSurface.title.trim() || surfaces[0]?.title.trim() || 'Terminal'
+    const launchAgent =
+      activeSurface.launchAgent ?? surfaces.find((surface) => surface.launchAgent)?.launchAgent
+    const title = normalizeCompatibleAgentTitleForOwner(
+      activeSurface.title.trim() || surfaces[0]?.title.trim() || 'Terminal',
+      launchAgent
+    )
     const existing =
       existingById.get(localTabId) ??
       existingById.get(parentTabId) ??
@@ -522,8 +531,6 @@ function buildMirroredTerminalTabs(
       activeSurface.quickCommandLabel?.trim() ||
       surfaces.find((surface) => surface.quickCommandLabel?.trim())?.quickCommandLabel?.trim() ||
       existing?.quickCommandLabel?.trim()
-    const launchAgent =
-      activeSurface.launchAgent ?? surfaces.find((surface) => surface.launchAgent)?.launchAgent
     // Why: tab color/pin echo back through host snapshots, so prefer the client's
     // own record (kept authoritative in tabsByWorktree by the pin/color setters)
     // and fall back to the host value only when this client has no prior tab —
@@ -580,7 +587,7 @@ function remapHostAgentStatus(surface: TerminalSurface): AgentStatusEntry | null
     return null
   }
   return {
-    ...surface.agentStatus,
+    ...normalizeCompatibleAgentStatusEntryForOwner(surface.agentStatus, surface.launchAgent),
     paneKey
   }
 }

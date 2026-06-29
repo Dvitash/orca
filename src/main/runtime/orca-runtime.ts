@@ -18,6 +18,10 @@ import {
   type AgentStatusEntry
 } from '../../shared/agent-status-types'
 import {
+  normalizeCompatibleAgentStatusEntryForOwner,
+  normalizeCompatibleAgentTitleForOwner
+} from '../../shared/agent-title-owner'
+import {
   createAgentStatusOscProcessor,
   type ProcessedAgentStatusChunk
 } from '../../shared/agent-status-osc'
@@ -17832,9 +17836,16 @@ export class OrcaRuntimeService {
             { title: pty.lastOscTitle, updatedAt: pty.lastOscTitleAt }
           )
         : null
-      const title = leafTitle ?? ptyTitle ?? syncedTab?.title ?? tab.title
+      const ownerAgent = tab.launchAgent ?? pty?.launchAgent ?? null
+      const title = normalizeCompatibleAgentTitleForOwner(
+        leafTitle ?? ptyTitle ?? syncedTab?.title ?? tab.title,
+        ownerAgent
+      )
       const liveTitleEvidence = leafTitle ?? ptyTitle
       const liveTitleEvidenceClassification = classifyAgentTitle(liveTitleEvidence)
+      const normalizedTabAgentStatus = tab.agentStatus
+        ? normalizeCompatibleAgentStatusEntryForOwner(tab.agentStatus, ownerAgent)
+        : null
       // Why: keep the rich hook-driven status when the agent has a live
       // interactive prompt or an active tool — those are authoritative agent
       // activity even if the terminal's title isn't agent-classified (e.g. it
@@ -17842,31 +17853,32 @@ export class OrcaRuntimeService {
       // the OSC-title-only status and never sees interactivePrompt (the question
       // card never renders).
       const hasLiveAgentSignal =
-        tab.agentStatus?.interactivePrompt != null || tab.agentStatus?.toolName != null
+        normalizedTabAgentStatus?.interactivePrompt != null ||
+        normalizedTabAgentStatus?.toolName != null
       const keepFullAgentStatus =
-        tab.agentStatus &&
+        normalizedTabAgentStatus &&
         (liveTitleEvidence === null ||
           liveTitleEvidenceClassification === 'agent' ||
           hasLiveAgentSignal)
       const agentStatus = keepFullAgentStatus
-        ? { agentStatus: tab.agentStatus }
+        ? { agentStatus: normalizedTabAgentStatus }
         : // Why: when live title evidence says the pane is idle (e.g. the Claude
           // agents picker or a neutral shell title), suppress the stale "working"
           // state so the client shows no spinner — but retain agent identity
           // (agentType + providerSession) so native chat can still address an
           // idle agent's transcript. Reset the transient state to 'done'.
-          tab.agentStatus?.agentType != null
+          normalizedTabAgentStatus?.agentType != null
           ? {
               agentStatus: {
                 state: 'done' as const,
                 prompt: '',
-                updatedAt: tab.agentStatus.updatedAt,
-                stateStartedAt: tab.agentStatus.stateStartedAt,
-                paneKey: tab.agentStatus.paneKey,
+                updatedAt: normalizedTabAgentStatus.updatedAt,
+                stateStartedAt: normalizedTabAgentStatus.stateStartedAt,
+                paneKey: normalizedTabAgentStatus.paneKey,
                 stateHistory: [],
-                agentType: tab.agentStatus.agentType,
-                ...(tab.agentStatus.providerSession
-                  ? { providerSession: tab.agentStatus.providerSession }
+                agentType: normalizedTabAgentStatus.agentType,
+                ...(normalizedTabAgentStatus.providerSession
+                  ? { providerSession: normalizedTabAgentStatus.providerSession }
                   : {})
               }
             }
@@ -17892,7 +17904,7 @@ export class OrcaRuntimeService {
         title,
         ...(tab.ptyId ? { ptyId: tab.ptyId } : {}),
         ...(tab.terminalTheme ? { terminalTheme: tab.terminalTheme } : {}),
-        ...(tab.launchAgent ? { launchAgent: tab.launchAgent } : {}),
+        ...(ownerAgent ? { launchAgent: ownerAgent } : {}),
         ...(agentStatus ?? this.buildPtyMobileAgentStatus(livePty ?? pty, tab, terminalHandle)),
         ...(tab.parentLayout ? { parentLayout: tab.parentLayout } : {}),
         ...(tab.color != null ? { color: tab.color } : {}),
@@ -17960,6 +17972,8 @@ export class OrcaRuntimeService {
       return {}
     }
     const now = pty.lastOutputAt ?? Date.now()
+    const ownerAgent = tab.launchAgent ?? pty.launchAgent ?? null
+    const agentType = ownerAgent ?? undefined
     return {
       agentStatus: {
         state:
@@ -17973,10 +17987,13 @@ export class OrcaRuntimeService {
         stateStartedAt: now,
         paneKey: this.getMobileTerminalPaneKey(tab),
         ...(terminalHandle ? { terminalHandle } : {}),
-        ...(tab.launchAgent ? { agentType: tab.launchAgent } : {}),
+        ...(agentType ? { agentType } : {}),
         worktreeId: pty.worktreeId,
         tabId: tab.parentTabId,
-        terminalTitle: getLatestPtyTitle(pty) ?? tab.title,
+        terminalTitle: normalizeCompatibleAgentTitleForOwner(
+          getLatestPtyTitle(pty) ?? tab.title,
+          ownerAgent
+        ),
         stateHistory: []
       }
     }
