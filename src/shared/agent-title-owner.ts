@@ -13,6 +13,9 @@ type TitleProfileMatch = {
 const COMPATIBLE_IDLE_TITLE_RE = /(?<![\w./\\-])(?:ready|idle|done)(?![\w-])/i
 const LEGACY_PI_COMPATIBLE_TITLE_RE = /^\s*(?:[\u2800-\u28ff]\s+)?π\s*(?:[-:]|\s)\s*.+/u
 
+/**
+ * Resolves the synthetic title profile matching a given agent label.
+ */
 function getProfileForTitleLabel(label: string | null): TitleProfileMatch | null {
   if (!label) {
     return null
@@ -26,6 +29,9 @@ function getProfileForTitleLabel(label: string | null): TitleProfileMatch | null
   return null
 }
 
+/**
+ * Resolves the synthetic title profile matching a given terminal title.
+ */
 function getProfileForTitle(title: string): TitleProfileMatch | null {
   const labelProfile = getProfileForTitleLabel(getAgentLabel(title))
   if (labelProfile) {
@@ -37,6 +43,10 @@ function getProfileForTitle(title: string): TitleProfileMatch | null {
   return null
 }
 
+/**
+ * Detects the agent status (working, permission, idle) from a terminal title,
+ * accounting for legacy Pi titles.
+ */
 function getSourceTitleStatus(title: string): 'working' | 'permission' | 'idle' | null {
   const detectedStatus = detectAgentStatusFromTitle(title)
   if (detectedStatus) {
@@ -48,6 +58,9 @@ function getSourceTitleStatus(title: string): 'working' | 'permission' | 'idle' 
   return null
 }
 
+/**
+ * Checks if a title indicates an agent is waiting for permissions or input.
+ */
 function hasPermissionSuffix(title: string, sourceProfile: SyntheticAgentTitleProfile): boolean {
   const normalizedTitle = title.trim().toLowerCase()
   return (
@@ -58,6 +71,9 @@ function hasPermissionSuffix(title: string, sourceProfile: SyntheticAgentTitlePr
   )
 }
 
+/**
+ * Checks if a title indicates an agent is idle or ready.
+ */
 function hasIdleSuffix(title: string, sourceProfile: SyntheticAgentTitleProfile): boolean {
   const normalizedTitle = title.trim().toLowerCase()
   return (

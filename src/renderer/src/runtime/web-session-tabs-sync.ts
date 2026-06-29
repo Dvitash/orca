@@ -483,6 +483,10 @@ function shouldReplaceTerminalTab(
   )
 }
 
+/**
+ * Constructs mirrored terminal tabs from the mobile session status payload,
+ * normalising Pi-compatible agent titles under launch ownership.
+ */
 function buildMirroredTerminalTabs(
   snapshot: RuntimeMobileSessionTabsResult,
   environmentId: string,
@@ -582,6 +586,10 @@ function toMirroredPaneKey(surface: TerminalSurface): string | null {
   return makePaneKey(toWebTerminalSurfaceTabId(surface.parentTabId), surface.leafId)
 }
 
+/**
+ * Normalises and mirrors agent status updates from the host payload,
+ * preserving authoritative ownership metadata.
+ */
 function remapHostAgentStatus(surface: TerminalSurface): AgentStatusEntry | null {
   if (!surface.agentStatus) {
     return null
@@ -602,6 +610,10 @@ function isMirroredAgentPaneKeyForTabs(paneKey: string, tabIds: ReadonlySet<stri
   return parsed !== null && tabIds.has(parsed.tabId)
 }
 
+/**
+ * Generates a state patch for mirrored agent statuses, merging host
+ * status entries with client overrides defensively.
+ */
 function buildMirroredAgentStatusPatch(
   state: WebSessionTabsSyncState,
   currentTerminalTabs: readonly TerminalTab[],

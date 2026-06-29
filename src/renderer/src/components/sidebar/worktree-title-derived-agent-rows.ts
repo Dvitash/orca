@@ -119,6 +119,10 @@ export function buildTitleDerivedAgentRows(args: {
   return rows
 }
 
+/**
+ * Constructs a dashboard agent row from a terminal tab's title fallback,
+ * normalising Pi-compatible agent names to their owner.
+ */
 function buildTitleDerivedAgentRow(args: {
   tab: TerminalTab
   leafId: string
@@ -183,6 +187,10 @@ export function resolveTitleDerivedAgentType(title: string, label: string): Agen
   return CLAUDE_AGENT_TOKEN_RE.test(title) ? agentType : null
 }
 
+/**
+ * Determines the agent type from a terminal title, normalising Pi-compatible
+ * agents to their authoritative owner if specified.
+ */
 export function resolveAgentTypeFromTerminalTitle(
   title: string | null | undefined,
   ownerAgentType?: AgentType | null

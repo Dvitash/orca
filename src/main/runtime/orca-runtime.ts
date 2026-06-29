@@ -3150,6 +3150,10 @@ export class OrcaRuntimeService {
       .filter((group) => group.tabOrder.length > 0)
   }
 
+  /**
+   * Publishes a PTY-backed terminal tab snapshot to the synced mobile session,
+   * normalizing Pi-compatible titles based on launch ownership.
+   */
   private publishPtyBackedMobileSessionTerminal(
     worktreeId: string,
     pty: RuntimePtyWorktreeRecord,
@@ -4918,6 +4922,10 @@ export class OrcaRuntimeService {
     this.recordPtyWorktree(ptyId, worktreeId, { connected: true, connectionId })
   }
 
+  /**
+   * Handles incoming data from a PTY process, running agent detection,
+   * updating terminal tail buffers, and triggering foreground agent refreshes.
+   */
   onPtyData(ptyId: string, data: string, at: number): number {
     const outputSequence = (this.ptyOutputSequenceById.get(ptyId) ?? 0) + data.length
     this.ptyOutputSequenceById.set(ptyId, outputSequence)
@@ -8355,10 +8363,18 @@ export class OrcaRuntimeService {
     }
   }
 
+  /**
+   * Schedules an asynchronous query to check which agent process is currently
+   * running in the foreground of a PTY.
+   */
   private refreshPtyForegroundAgent(ptyId: string): void {
     void this.refreshPtyForegroundAgentFromController(ptyId)
   }
 
+  /**
+   * Deduplicates and manages in-flight foreground agent refresh queries
+   * for a specific PTY.
+   */
   private refreshPtyForegroundAgentFromController(ptyId: string): Promise<void> {
     const pendingRefresh = this.ptyForegroundAgentRefreshes.get(ptyId)
     if (pendingRefresh) {
@@ -8371,6 +8387,10 @@ export class OrcaRuntimeService {
     return refresh
   }
 
+  /**
+   * Queries the PTY controller for the active foreground process, identifies if it
+   * is a recognized agent, and updates the PTY's foreground agent state if changed.
+   */
   private async loadPtyForegroundAgentFromController(ptyId: string): Promise<void> {
     if (!this.ptyController) {
       return
@@ -17334,6 +17354,10 @@ export class OrcaRuntimeService {
     return this.recordPtyWorktree(ptyId, inferredWorktreeId)
   }
 
+  /**
+   * Synchronizes PTY tracking records with the running daemon sessions,
+   * querying their foreground agent states.
+   */
   private async refreshPtyWorktreeRecordsFromController(
     resolvedWorktrees: ResolvedWorktree[],
     targetWorktreeId: string | null = null
@@ -17829,6 +17853,10 @@ export class OrcaRuntimeService {
     return first ?? second
   }
 
+  /**
+   * Transforms an internal mobile session tab snapshot into a sanitized client payload,
+   * resolving launch agent ownership and normalizing titles.
+   */
   private toMobileSessionTabsResult(
     snapshot: RuntimeMobileSessionTabsSnapshot
   ): RuntimeMobileSessionTabsResult {
@@ -18006,6 +18034,10 @@ export class OrcaRuntimeService {
     }
   }
 
+  /**
+   * Generates a mobile-friendly status entry for a PTY, aligning agentType
+   * and titles with the active owner.
+   */
   private buildPtyMobileAgentStatus(
     pty: RuntimePtyWorktreeRecord | null,
     tab: RuntimeMobileSessionTerminalTab,

@@ -41,14 +41,18 @@ function tabFromAttributedStatusEntry(entry: AgentStatusEntry): TerminalTab | nu
   }
 }
 
+/**
+ * Resolves the sidebar row agent type, prioritizing launch agent configuration
+ * and normalizing compatible agent kinds.
+ */
 function resolveRowAgentType(entry: AgentStatusEntry, tab?: TerminalTab | null): AgentType {
   const entryAgentType = resolveCompatibleAgentTypeForOwner(entry.agentType, tab?.launchAgent)
   if (entryAgentType && entryAgentType !== 'unknown') {
     return entryAgentType
   }
   return (
-    tab?.launchAgent ??
     resolveAgentTypeFromTerminalTitle(entry.terminalTitle ?? tab?.title, tab?.launchAgent) ??
+    tab?.launchAgent ??
     entryAgentType ??
     'unknown'
   )

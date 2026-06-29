@@ -812,6 +812,10 @@ function containsCursorRestore(data: string): boolean {
   return hideIndex !== -1 && showIndex > hideIndex && containsCursorPositionSequence(data)
 }
 
+/**
+ * Establishes a binding between a terminal pane and its corresponding PTY stream,
+ * managing input, output, title synchronization, and agent status tracking.
+ */
 export function connectPanePty(
   pane: ManagedPane,
   manager: PaneManager,
@@ -977,6 +981,10 @@ export function connectPanePty(
     )
     return tab?.defaultTitle?.trim() || 'Terminal'
   }
+  /**
+   * Resolves the authoritative owner agent type for this pane, checking tab launch,
+   * pane startup, and store state configuration.
+   */
   const getAuthoritativePaneAgent = (): AgentType | undefined => {
     const state = useAppStore.getState()
     const tab = (state.tabsByWorktree[deps.worktreeId] ?? []).find(
