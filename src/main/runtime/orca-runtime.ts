@@ -5018,7 +5018,12 @@ export class OrcaRuntimeService {
         if (agentStatus === 'idle' && prevStatus !== 'idle') {
           this.resolvePtyTuiIdleWaiters(pty, ptyId)
         }
-        this.refreshPtyForegroundAgent(ptyId)
+        // Why: gate on an actual status transition — braille spinner frames
+        // mutate the title every tick, so probing per-title-change would stream
+        // a foreground query per frame during active work.
+        if (prevStatus !== pty.lastAgentStatus) {
+          this.refreshPtyForegroundAgent(ptyId)
+        }
       }
     }
 
@@ -8397,6 +8402,12 @@ export class OrcaRuntimeService {
     }
     const pty = this.ptysById.get(ptyId)
     if (!pty?.connected) {
+      return
+    }
+    // Why: foregroundAgent is only consulted as the owner fallback when
+    // launchAgent is unknown, so a known launchAgent makes the relay
+    // getForegroundProcess round-trip pure waste (covers all launched agents).
+    if (pty.launchAgent) {
       return
     }
     let foregroundProcess: string | null
@@ -17387,7 +17398,10 @@ export class OrcaRuntimeService {
           connected: true
         })
       }
-      await this.refreshPtyForegroundAgentFromController(session.id)
+      // Why: fire-and-forget so this listing hot path (listTerminals/getWorktreePs)
+      // does not serialize a relay round-trip per session — and a throwing snapshot
+      // listener cannot abort the liveness sweep below.
+      this.refreshPtyForegroundAgent(session.id)
     }
     for (const pty of this.ptysById.values()) {
       if (!livePtyIds.has(pty.ptyId) && !this.leafExistsForPty(pty.ptyId)) {

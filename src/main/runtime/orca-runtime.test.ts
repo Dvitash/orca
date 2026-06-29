@@ -11130,6 +11130,62 @@ describe('OrcaRuntimeService', () => {
     )
   })
 
+  it('skips the foreground-process probe when the PTY launch agent is already known', async () => {
+    // Why: foregroundAgent is only the owner fallback when launchAgent is unknown,
+    // so probing a launched agent (e.g. omp) would burn a relay round-trip on every
+    // status transition without ever changing the resolved owner.
+    const getForegroundProcess = vi.fn(async () => 'omp')
+    const runtime = new OrcaRuntimeService(store)
+    runtime.setPtyController({
+      spawn: vi.fn().mockResolvedValue({ id: 'pty-omp' }),
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess
+    })
+    runtime.attachWindow(1)
+    await runtime.createTerminal(`path:${TEST_WORKTREE_PATH}`, {
+      command: 'omp',
+      launchAgent: 'omp',
+      title: 'OMP',
+      activate: true
+    })
+
+    runtime.onPtyData('pty-omp', '\x1b]0;⠋ OMP\x07working\n', 100)
+    runtime.onPtyData('pty-omp', '\x1b]0;OMP ready\x07idle\n', 200)
+
+    expect(getForegroundProcess).not.toHaveBeenCalled()
+  })
+
+  it('probes the foreground process only on a status transition for unknown launch agents', async () => {
+    const getForegroundProcess = vi.fn(async () => 'omp')
+    const runtime = createRuntime()
+    runtime.setPtyController({
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess
+    })
+    syncSinglePty(runtime, 'pty-bg')
+    // Why: each probe dedups while in-flight, so settle it before the next frame
+    // to prove the gate (not the dedup) is what suppresses extra probes.
+    const settleProbe = (): Promise<void> => new Promise((resolve) => setImmediate(resolve))
+
+    // Two working frames (spinner churn) collapse to a single status transition.
+    runtime.onPtyData('pty-bg', '\x1b]0;⠋ OMP\x07alpha\n', 100)
+    runtime.onPtyData('pty-bg', '\x1b]0;⠊ OMP\x07bravo\n', 200)
+    await settleProbe()
+    expect(getForegroundProcess).toHaveBeenCalledTimes(1)
+
+    // Transition to idle is a second distinct status, so it probes again.
+    runtime.onPtyData('pty-bg', '\x1b]0;OMP ready\x07charlie\n', 300)
+    await settleProbe()
+    expect(getForegroundProcess).toHaveBeenCalledTimes(2)
+
+    // A repeated idle frame is not a transition, so it does not probe again.
+    runtime.onPtyData('pty-bg', '\x1b]0;OMP ready\x07delta\n', 400)
+    await settleProbe()
+    expect(getForegroundProcess).toHaveBeenCalledTimes(2)
+  })
+
   it('keeps renderer-vetted mobile agent status for custom-titled terminals', async () => {
     const runtime = new OrcaRuntimeService(store)
     const leafId = '11111111-1111-4111-8111-111111111111'

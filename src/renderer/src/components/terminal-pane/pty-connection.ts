@@ -984,6 +984,10 @@ export function connectPanePty(
   /**
    * Resolves the authoritative owner agent type for this pane, checking tab launch,
    * pane startup, and store state configuration.
+   *
+   * Why: launch ownership wins so Pi-compatible live titles/hooks can't repaint an
+   * OMP-owned pane back to Pi; the stored status agentType is only the last-resort
+   * fallback because it can itself be a Pi-compatible frame.
    */
   const getAuthoritativePaneAgent = (): AgentType | undefined => {
     const state = useAppStore.getState()
