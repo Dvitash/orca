@@ -18,6 +18,7 @@ import { SESSION_TAB_METHODS } from './session-tabs'
 import { NATIVE_CHAT_METHODS } from './native-chat'
 import { FILE_METHODS } from './files'
 import { GIT_METHODS } from './git'
+import { PROJECT_NOTES_METHODS } from './project-notes'
 import { GITHUB_METHODS } from './github'
 import { GITLAB_METHODS } from './gitlab'
 import { HOSTED_REVIEW_METHODS } from './hosted-review'
@@ -56,6 +57,7 @@ export const ALL_RPC_METHODS: readonly RpcAnyMethod[] = [
   ...SESSION_TAB_METHODS,
   ...NATIVE_CHAT_METHODS,
   ...FILE_METHODS,
+  ...PROJECT_NOTES_METHODS,
   ...GIT_METHODS,
   ...GITHUB_METHODS,
   ...GITLAB_METHODS,

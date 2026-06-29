@@ -74,7 +74,8 @@ export class SshFilesystemProvider implements IFilesystemProvider {
   constructor(
     connectionId: string,
     mux: SshChannelMultiplexer,
-    private readonly createSftp?: SftpFactory
+    private readonly createSftp?: SftpFactory,
+    private readonly userDataPath?: string | null
   ) {
     this.connectionId = connectionId
     this.mux = mux
@@ -92,6 +93,11 @@ export class SshFilesystemProvider implements IFilesystemProvider {
         }
       }
     })
+  }
+
+  /** Returns the detected Orca app-data directory on the remote SSH host. */
+  getUserDataPath(): string | null {
+    return this.userDataPath ?? null
   }
 
   dispose(): void {

@@ -50,6 +50,7 @@ import { PortScanner } from './ssh-port-scanner'
 import type { SshPortForwardManager } from './ssh-port-forward'
 import type { SshConnection } from './ssh-connection'
 import { joinRemotePath, isWindowsRemoteHost, type RemoteHostPlatform } from './ssh-remote-platform'
+import { resolveRemoteOrcaUserDataPath } from './remote-orca-user-data-path'
 import { makeRemoteDirectoryCommand, makeRemoteExecutableCommand } from './ssh-remote-commands'
 import {
   DEFAULT_SSH_RELAY_GRACE_PERIOD_SECONDS,
@@ -119,6 +120,7 @@ export class SshRelaySession {
   private currentConnection: SshConnection | null = null
   private hostPlatform: RemoteHostPlatform | null = null
   private remoteCliBridgeEnv: RemoteCliBridgeEnv | null = null
+  private remoteOrcaUserDataPath: string | null = null
   private forwardedReattachReplayByPty = new Map<string, ForwardedReplayFingerprint>()
 
   constructor(
@@ -214,6 +216,8 @@ export class SshRelaySession {
       const { transport, remoteHome, remoteRelayDir, nodePath, sockPath, hostPlatform } =
         await deployAndLaunchRelay(conn, undefined, graceTimeSeconds, this.targetId)
       this.hostPlatform = hostPlatform ?? null
+      this.remoteOrcaUserDataPath =
+        remoteHome && hostPlatform ? resolveRemoteOrcaUserDataPath(remoteHome, hostPlatform) : null
       this.remoteCliBridgeEnv =
         remoteHome && remoteRelayDir && nodePath && sockPath && hostPlatform
           ? {
@@ -341,6 +345,8 @@ export class SshRelaySession {
       const { transport, remoteHome, remoteRelayDir, nodePath, sockPath, hostPlatform } =
         await deployAndLaunchRelay(conn, undefined, graceTimeSeconds, this.targetId)
       this.hostPlatform = hostPlatform ?? null
+      this.remoteOrcaUserDataPath =
+        remoteHome && hostPlatform ? resolveRemoteOrcaUserDataPath(remoteHome, hostPlatform) : null
       this.remoteCliBridgeEnv =
         remoteHome && remoteRelayDir && nodePath && sockPath && hostPlatform
           ? {
@@ -540,8 +546,11 @@ export class SshRelaySession {
     const ptyProvider = new SshPtyProvider(this.targetId, mux, this.remoteCliBridgeEnv ?? undefined)
     registerSshPtyProvider(this.targetId, ptyProvider)
 
-    const fsProvider = new SshFilesystemProvider(this.targetId, mux, () =>
-      this.requireReadyConnection().sftp()
+    const fsProvider = new SshFilesystemProvider(
+      this.targetId,
+      mux,
+      () => this.requireReadyConnection().sftp(),
+      this.remoteOrcaUserDataPath
     )
     registerSshFilesystemProvider(this.targetId, fsProvider)
 

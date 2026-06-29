@@ -4,6 +4,10 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ProjectNotesPanel from './ProjectNotesPanel'
+import {
+  PROJECT_NOTES_MAX_CHARS,
+  PROJECT_NOTES_WARNING_THRESHOLD_CHARS
+} from '../../../../shared/project-notes'
 
 const mocks = vi.hoisted(() => ({
   readProjectNotes: vi.fn(),
@@ -11,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   activeWorktree: {
     id: 'wt-1',
     repoId: 'repo-1',
+    instanceId: 'workspace-instance-1',
     path: '/home/dvita/orca/workspaces/Verde'
   },
   activeRepo: {
@@ -124,7 +129,7 @@ describe('ProjectNotesPanel', () => {
     mocks.writeProjectNotes.mockReset()
     mocks.readProjectNotes.mockResolvedValue({
       content: 'existing notes',
-      filePath: '/home/dvita/orca/workspaces/Verde/notes.md'
+      filePath: '/home/dvita/.config/orca/project-notes/hash/notes.md'
     })
     mocks.writeProjectNotes.mockResolvedValue(undefined)
     mocks.activeRepo.connectionId = null
@@ -169,7 +174,7 @@ describe('ProjectNotesPanel', () => {
     await act(async () => {
       pendingRead.resolve({
         content: '',
-        filePath: '/home/dvita/orca/workspaces/Verde/notes.md'
+        filePath: '/home/dvita/.config/orca/project-notes/hash/notes.md'
       })
       await Promise.resolve()
     })
@@ -188,8 +193,7 @@ describe('ProjectNotesPanel', () => {
     expect(mocks.writeProjectNotes).toHaveBeenCalledWith(
       expect.objectContaining({
         settings: { activeRuntimeEnvironmentId: null },
-        worktreeId: 'wt-1',
-        worktreePath: '/home/dvita/orca/workspaces/Verde',
+        scopeId: 'workspace-instance-1',
         connectionId: undefined
       }),
       'pnpm test --filter smoke'
@@ -204,8 +208,7 @@ describe('ProjectNotesPanel', () => {
 
     expect(mocks.writeProjectNotes).toHaveBeenCalledWith(
       expect.objectContaining({
-        worktreeId: 'wt-1',
-        worktreePath: '/home/dvita/orca/workspaces/Verde'
+        scopeId: 'workspace-instance-1'
       }),
       'blur flush notes'
     )
@@ -223,8 +226,7 @@ describe('ProjectNotesPanel', () => {
 
     expect(mocks.writeProjectNotes).toHaveBeenCalledWith(
       expect.objectContaining({
-        worktreeId: 'wt-1',
-        worktreePath: '/home/dvita/orca/workspaces/Verde'
+        scopeId: 'workspace-instance-1'
       }),
       'unmount flush notes'
     )
@@ -238,6 +240,34 @@ describe('ProjectNotesPanel', () => {
 
     expect(container?.textContent).not.toContain('Saved')
     expect(container?.textContent).not.toContain('Saving')
+  })
+
+  it('shows a bottom-right character count near the notes limit', async () => {
+    await renderPanel()
+
+    expect(getTextarea().maxLength).toBe(PROJECT_NOTES_MAX_CHARS)
+    expect(container?.textContent).not.toContain(
+      `${PROJECT_NOTES_WARNING_THRESHOLD_CHARS}/${PROJECT_NOTES_MAX_CHARS}`
+    )
+
+    await editTextarea('a'.repeat(PROJECT_NOTES_WARNING_THRESHOLD_CHARS))
+
+    expect(container?.textContent).toContain(
+      `${PROJECT_NOTES_WARNING_THRESHOLD_CHARS}/${PROJECT_NOTES_MAX_CHARS}`
+    )
+  })
+
+  it('clamps pasted notes to the character limit before autosave', async () => {
+    await renderPanel()
+
+    await editTextarea('a'.repeat(PROJECT_NOTES_MAX_CHARS + 10))
+    await advanceAutosaveTimer()
+
+    expect(getTextarea().value).toHaveLength(PROJECT_NOTES_MAX_CHARS)
+    expect(mocks.writeProjectNotes).toHaveBeenCalledWith(
+      expect.anything(),
+      'a'.repeat(PROJECT_NOTES_MAX_CHARS)
+    )
   })
 
   it('shows a low-key save error and preserves edited content when autosave rejects', async () => {

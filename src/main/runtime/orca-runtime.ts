@@ -652,8 +652,16 @@ import { closeLocalWatcherForWorktreePath } from '../ipc/filesystem-watcher'
 import { HeadlessEmulator } from '../daemon/headless-emulator'
 import { killAllProcessesForWorktree } from './worktree-teardown'
 import { MOBILE_SUBSCRIBE_SCROLLBACK_ROWS } from './scrollback-limits'
+import {
+  readManagedProjectNotes,
+  writeManagedProjectNotes,
+  type ProjectNotesDocument
+} from './project-notes-storage'
 import type { IFilesystemProvider, IPtyProvider } from '../providers/types'
-import { getSshFilesystemProvider } from '../providers/ssh-filesystem-dispatch'
+import {
+  getSshFilesystemProvider,
+  requireSshFilesystemProvider
+} from '../providers/ssh-filesystem-dispatch'
 import {
   assertFolderWorkspacePathUsable,
   getFolderWorkspacePathStatus,
@@ -4850,6 +4858,33 @@ export class OrcaRuntimeService {
   statRuntimeFile: RuntimeFileCommands['statRuntimeFile'] = this.fileCommands.statRuntimeFile.bind(
     this.fileCommands
   )
+
+  /** Reads project notes from Orca-managed storage on the project-owning host. */
+  async readProjectNotes(
+    scopeId: string,
+    connectionId?: string | null
+  ): Promise<ProjectNotesDocument> {
+    return readManagedProjectNotes(scopeId, this.getProjectNotesFilesystemProvider(connectionId))
+  }
+
+  /** Writes project notes to Orca-managed storage on the project-owning host. */
+  async writeProjectNotes(
+    scopeId: string,
+    content: string,
+    connectionId?: string | null
+  ): Promise<{ ok: true }> {
+    return writeManagedProjectNotes(
+      scopeId,
+      content,
+      this.getProjectNotesFilesystemProvider(connectionId)
+    )
+  }
+
+  private getProjectNotesFilesystemProvider(
+    connectionId?: string | null
+  ): IFilesystemProvider | undefined {
+    return connectionId ? requireSshFilesystemProvider(connectionId) : undefined
+  }
 
   private readonly gitCommands = new RuntimeGitCommands({
     resolveRuntimeGitTarget: (selector) => this.resolveRuntimeGitTarget(selector),

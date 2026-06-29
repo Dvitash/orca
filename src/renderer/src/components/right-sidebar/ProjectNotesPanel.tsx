@@ -9,6 +9,11 @@ import {
   writeProjectNotes,
   type ProjectNotesOperationContext
 } from '@/runtime/project-notes-client'
+import {
+  normalizeProjectNotesContent,
+  PROJECT_NOTES_MAX_CHARS,
+  PROJECT_NOTES_WARNING_THRESHOLD_CHARS
+} from '../../../../shared/project-notes'
 
 const PROJECT_NOTES_SAVE_DEBOUNCE_MS = 700
 
@@ -41,39 +46,36 @@ function ProjectNotesFooterMessage({
 /** Builds the notes file operation context for the active workspace. */
 function useProjectNotesOperationContext(): ProjectNotesOperationContext | null {
   const activeWorktree = useActiveWorktree()
-  const activeWorktreeId = activeWorktree?.id ?? null
-  const activeWorktreePath = activeWorktree?.path ?? null
+  const activeWorktreeScopeId = activeWorktree?.instanceId ?? null
   const activeRepo = useRepoById(activeWorktree?.repoId ?? null)
   const settings = useAppStore((s) => s.settings)
   const notesSettings = useMemo(
-    () => ({ activeRuntimeEnvironmentId: settings.activeRuntimeEnvironmentId }),
-    [settings.activeRuntimeEnvironmentId]
+    () => ({ activeRuntimeEnvironmentId: settings?.activeRuntimeEnvironmentId ?? null }),
+    [settings?.activeRuntimeEnvironmentId]
   )
 
   return useMemo(() => {
-    if (!activeWorktreeId || !activeWorktreePath) {
+    if (!activeWorktreeScopeId) {
       return null
     }
     return {
       settings: notesSettings,
-      worktreeId: activeWorktreeId,
-      worktreePath: activeWorktreePath,
+      scopeId: activeWorktreeScopeId,
       connectionId: activeRepo?.connectionId ?? undefined
     }
-  }, [activeRepo?.connectionId, activeWorktreeId, activeWorktreePath, notesSettings])
+  }, [activeRepo?.connectionId, activeWorktreeScopeId, notesSettings])
 }
 
-/** Returns a stable identity for the workspace file target that owns current notes. */
+/** Returns a stable identity for the managed notes scope that owns current notes. */
 function getProjectNotesOperationKey(context: ProjectNotesOperationContext): string {
   return [
-    context.worktreeId,
-    context.worktreePath,
+    context.scopeId,
     context.connectionId ?? '',
     context.settings?.activeRuntimeEnvironmentId ?? ''
   ].join('\0')
 }
 
-/** Renders an autosaved text document backed by notes.md in the active workspace. */
+/** Renders an autosaved text document backed by Orca-managed project notes. */
 export default function ProjectNotesPanel(): JSX.Element {
   const operationContext = useProjectNotesOperationContext()
   const operationKey = useMemo(
@@ -237,7 +239,7 @@ export default function ProjectNotesPanel(): JSX.Element {
 
   const handleChange = useCallback(
     (event: ChangeEvent<HTMLTextAreaElement>): void => {
-      const nextContent = event.target.value
+      const nextContent = normalizeProjectNotesContent(event.target.value)
       contentRef.current = nextContent
       editedDuringLoadRef.current = true
       setContent(nextContent)
@@ -276,19 +278,29 @@ export default function ProjectNotesPanel(): JSX.Element {
         )
       : null
 
+  const showCharacterCount = content.length >= PROJECT_NOTES_WARNING_THRESHOLD_CHARS
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 bg-editor-surface p-3">
-      <textarea
-        aria-label={translate(
-          'auto.components.right.sidebar.ProjectNotesPanel.projectNotesLabel',
-          'Project notes'
+      <div className="relative flex min-h-0 flex-1">
+        <textarea
+          aria-label={translate(
+            'auto.components.right.sidebar.ProjectNotesPanel.projectNotesLabel',
+            'Project notes'
+          )}
+          value={content}
+          onChange={handleChange}
+          onBlur={handleBlur}
+          maxLength={PROJECT_NOTES_MAX_CHARS}
+          spellCheck={false}
+          className="min-h-0 flex-1 resize-none border-0 bg-transparent p-3 pb-7 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0"
+        />
+        {showCharacterCount && (
+          <div className="pointer-events-none absolute bottom-2 right-3 rounded bg-editor-surface/90 px-1.5 py-0.5 text-xs tabular-nums text-muted-foreground">
+            {content.length}/{PROJECT_NOTES_MAX_CHARS}
+          </div>
         )}
-        value={content}
-        onChange={handleChange}
-        onBlur={handleBlur}
-        spellCheck={false}
-        className="min-h-0 flex-1 resize-none border-0 bg-transparent p-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0"
-      />
+      </div>
       <div className="min-h-5">
         {footerMessage && (
           <ProjectNotesFooterMessage

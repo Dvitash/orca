@@ -3,32 +3,26 @@ import {
   MIN_COMPATIBLE_RUNTIME_CLIENT_VERSION,
   RUNTIME_PROTOCOL_VERSION
 } from '../../../shared/protocol-version'
+import { PROJECT_NOTES_MAX_CHARS } from '../../../shared/project-notes'
 import {
-  getProjectNotesFilePath,
   readProjectNotes,
   writeProjectNotes,
   type ProjectNotesOperationContext
 } from './project-notes-client'
 import { clearRuntimeCompatibilityCacheForTests } from './runtime-rpc-client'
 
-const fsReadFile = vi.fn()
-const fsWriteFile = vi.fn()
-const fsPathExists = vi.fn()
+const runtimeCall = vi.fn()
 const runtimeEnvironmentCall = vi.fn()
 const runtimeEnvironmentTransportCall = vi.fn()
 
 const localContext: ProjectNotesOperationContext = {
   settings: { activeRuntimeEnvironmentId: null },
-  worktreeId: 'wt-1',
-  worktreePath: 'C:\\Users\\dvita\\orca\\workspaces\\Verde'
+  scopeId: 'workspace-instance-1'
 }
 
 beforeEach(() => {
   clearRuntimeCompatibilityCacheForTests()
-  fsReadFile.mockReset()
-  fsWriteFile.mockReset()
-  fsPathExists.mockReset()
-  fsPathExists.mockResolvedValue(true)
+  runtimeCall.mockReset()
   runtimeEnvironmentCall.mockReset()
   runtimeEnvironmentTransportCall.mockReset()
   runtimeEnvironmentTransportCall.mockImplementation((args: { method: string }) => {
@@ -47,10 +41,8 @@ beforeEach(() => {
   })
   vi.stubGlobal('window', {
     api: {
-      fs: {
-        readFile: fsReadFile,
-        writeFile: fsWriteFile,
-        pathExists: fsPathExists
+      runtime: {
+        call: runtimeCall
       },
       runtimeEnvironments: {
         call: runtimeEnvironmentTransportCall
@@ -60,87 +52,81 @@ beforeEach(() => {
 })
 
 describe('project notes client', () => {
-  it('computes the workspace-root notes path with the host separator', () => {
-    expect(getProjectNotesFilePath('C:\\Users\\dvita\\orca\\workspaces\\Verde')).toBe(
-      'C:\\Users\\dvita\\orca\\workspaces\\Verde\\notes.md'
-    )
-  })
-
-  it('reads local workspace notes through the preload filesystem API', async () => {
-    fsReadFile.mockResolvedValue({ content: 'remember smoke test', isBinary: false })
+  it('reads local workspace notes through the runtime RPC API', async () => {
+    runtimeCall.mockResolvedValue({
+      id: 'read-1',
+      ok: true,
+      result: {
+        content: 'remember smoke test',
+        filePath: '/home/dvita/.config/orca/project-notes/hash/notes.md'
+      }
+    })
 
     await expect(readProjectNotes(localContext)).resolves.toEqual({
       content: 'remember smoke test',
-      filePath: 'C:\\Users\\dvita\\orca\\workspaces\\Verde\\notes.md'
+      filePath: '/home/dvita/.config/orca/project-notes/hash/notes.md'
     })
 
-    expect(fsPathExists).toHaveBeenCalledWith({
-      filePath: 'C:\\Users\\dvita\\orca\\workspaces\\Verde\\notes.md',
-      connectionId: undefined
-    })
-    expect(fsReadFile).toHaveBeenCalledWith({
-      filePath: 'C:\\Users\\dvita\\orca\\workspaces\\Verde\\notes.md',
-      connectionId: undefined
+    expect(runtimeCall).toHaveBeenCalledWith({
+      method: 'projectNotes.read',
+      params: { scopeId: 'workspace-instance-1' }
     })
   })
 
-  it('writes SSH workspace notes through the preload filesystem API with the connection id', async () => {
+  it('writes SSH workspace notes through local runtime RPC with the connection id', async () => {
+    runtimeCall.mockResolvedValue({ id: 'write-1', ok: true, result: { ok: true } })
+
     await writeProjectNotes(
       {
         settings: { activeRuntimeEnvironmentId: null },
-        worktreeId: 'wt-1',
-        worktreePath: '/home/dvita/orca/workspaces/Verde',
+        scopeId: 'workspace-instance-1',
         connectionId: 'ssh-1'
       },
       'pnpm test --filter smoke'
     )
 
-    expect(fsWriteFile).toHaveBeenCalledWith({
-      filePath: '/home/dvita/orca/workspaces/Verde/notes.md',
-      content: 'pnpm test --filter smoke',
-      connectionId: 'ssh-1'
+    expect(runtimeCall).toHaveBeenCalledWith({
+      method: 'projectNotes.write',
+      params: {
+        scopeId: 'workspace-instance-1',
+        connectionId: 'ssh-1',
+        content: 'pnpm test --filter smoke'
+      }
     })
   })
 
-  it('creates a blank notes file when the workspace notes file is missing', async () => {
-    fsPathExists.mockResolvedValue(false)
-
-    await expect(readProjectNotes(localContext)).resolves.toEqual({
-      content: '',
-      filePath: 'C:\\Users\\dvita\\orca\\workspaces\\Verde\\notes.md'
-    })
-
-    expect(fsReadFile).not.toHaveBeenCalled()
-    expect(fsWriteFile).toHaveBeenCalledWith({
-      filePath: 'C:\\Users\\dvita\\orca\\workspaces\\Verde\\notes.md',
-      content: '',
-      connectionId: undefined
-    })
-  })
-
-  it('writes remote runtime workspace notes through the runtime files RPC', async () => {
+  it('writes remote runtime workspace notes through runtime-owned storage', async () => {
     runtimeEnvironmentCall.mockResolvedValue({
       id: 'write-1',
       ok: true,
-      result: null,
+      result: { ok: true },
       _meta: { runtimeId: 'remote-runtime' }
     })
 
     await writeProjectNotes(
       {
         settings: { activeRuntimeEnvironmentId: 'env-1' },
-        worktreeId: 'wt-1',
-        worktreePath: '/runtime/workspaces/Verde'
+        scopeId: 'workspace-instance-1',
+        connectionId: 'client-ssh-id'
       },
       'remote note'
     )
 
     expect(runtimeEnvironmentCall).toHaveBeenCalledWith({
       selector: 'env-1',
-      method: 'files.write',
-      params: { worktree: 'id:wt-1', relativePath: 'notes.md', content: 'remote note' },
+      method: 'projectNotes.write',
+      params: { scopeId: 'workspace-instance-1', content: 'remote note' },
       timeoutMs: 15_000
     })
-    expect(fsWriteFile).not.toHaveBeenCalled()
+    expect(runtimeCall).not.toHaveBeenCalled()
+  })
+
+  it('clamps outbound note content to the persisted character limit', async () => {
+    runtimeCall.mockResolvedValue({ id: 'write-1', ok: true, result: { ok: true } })
+
+    await writeProjectNotes(localContext, 'a'.repeat(PROJECT_NOTES_MAX_CHARS + 10))
+
+    const request = runtimeCall.mock.calls[0]?.[0]
+    expect(request.params.content).toBe('a'.repeat(PROJECT_NOTES_MAX_CHARS))
   })
 })
