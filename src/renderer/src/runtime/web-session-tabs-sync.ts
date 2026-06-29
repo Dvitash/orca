@@ -517,9 +517,13 @@ function buildMirroredTerminalTabs(
       .filter((ptyId): ptyId is string => typeof ptyId === 'string' && ptyId.length > 0)
     const launchAgent =
       activeSurface.launchAgent ?? surfaces.find((surface) => surface.launchAgent)?.launchAgent
+    const ownerAgent =
+      launchAgent ??
+      activeSurface.agentStatus?.agentType ??
+      surfaces.find((surface) => surface.agentStatus?.agentType)?.agentStatus?.agentType
     const title = normalizeCompatibleAgentTitleForOwner(
       activeSurface.title.trim() || surfaces[0]?.title.trim() || 'Terminal',
-      launchAgent
+      ownerAgent
     )
     const existing =
       existingById.get(localTabId) ??
@@ -586,8 +590,9 @@ function remapHostAgentStatus(surface: TerminalSurface): AgentStatusEntry | null
   if (!paneKey) {
     return null
   }
+  const ownerAgent = surface.launchAgent ?? surface.agentStatus.agentType
   return {
-    ...normalizeCompatibleAgentStatusEntryForOwner(surface.agentStatus, surface.launchAgent),
+    ...normalizeCompatibleAgentStatusEntryForOwner(surface.agentStatus, ownerAgent),
     paneKey
   }
 }
@@ -627,10 +632,11 @@ function buildMirroredAgentStatusPatch(
     // Why: active web streams can report a fresher OSC 9999 status for the same
     // mirrored pane before the next host snapshot arrives. Do not rewind that
     // row with an older host publication.
-    nextByPaneKey.set(
-      entry.paneKey,
-      existing && existing.updatedAt > entry.updatedAt ? existing : entry
-    )
+    const nextEntry =
+      existing && existing.updatedAt > entry.updatedAt
+        ? normalizeCompatibleAgentStatusEntryForOwner(existing, entry.agentType)
+        : entry
+    nextByPaneKey.set(entry.paneKey, nextEntry)
   }
 
   let nextAgentStatusByPaneKey = state.agentStatusByPaneKey

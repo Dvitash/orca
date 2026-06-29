@@ -76,7 +76,7 @@ import { createBrowserUuid } from '@/lib/browser-uuid'
 import { makePaneKey, parseLegacyNumericPaneKey } from '../../../../shared/stable-pane-id'
 import { createTerminalCommandLifecycle } from './terminal-command-lifecycle'
 import { e2eConfig } from '@/lib/e2e-config'
-import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
+import type { AgentStatusEntry, AgentType } from '../../../../shared/agent-status-types'
 import { isWebTerminalSurfaceTabId } from '@/runtime/web-terminal-surface-id'
 import {
   createAgentInterruptInference,
@@ -977,12 +977,17 @@ export function connectPanePty(
     )
     return tab?.defaultTitle?.trim() || 'Terminal'
   }
-  const getAuthoritativePaneAgent = (): TuiAgent | undefined => {
+  const getAuthoritativePaneAgent = (): AgentType | undefined => {
     const state = useAppStore.getState()
     const tab = (state.tabsByWorktree[deps.worktreeId] ?? []).find(
       (entry) => entry.id === deps.tabId
     )
-    return tab?.launchAgent ?? paneStartup?.launchAgent ?? paneStartup?.initialAgentStatus?.agent
+    return (
+      tab?.launchAgent ??
+      paneStartup?.launchAgent ??
+      paneStartup?.initialAgentStatus?.agent ??
+      state.agentStatusByPaneKey[cacheKey]?.agentType
+    )
   }
   const clearInferredInterruptWorkingTitle = (): void => {
     const state = useAppStore.getState()
@@ -1918,9 +1923,10 @@ export function connectPanePty(
             // be stored against a title that was never paired with it.
             const currentState = useAppStore.getState()
             const title = currentState.runtimePaneTitlesByTabId?.[deps.tabId]?.[pane.id]
+            const authoritativePaneAgent = getAuthoritativePaneAgent()
             const agentType = resolveCompatibleAgentTypeForOwner(
               payload.agentType,
-              getAuthoritativePaneAgent()
+              authoritativePaneAgent
             )
             const statusPayload =
               agentType === payload.agentType ? payload : { ...payload, agentType }
@@ -1928,7 +1934,7 @@ export function connectPanePty(
             const statusTitle = resolvedStatusTitle
               ? normalizeCompatibleAgentTitleForOwner(
                   resolvedStatusTitle,
-                  agentType ?? getAuthoritativePaneAgent()
+                  agentType ?? authoritativePaneAgent
                 )
               : resolvedStatusTitle
             if (launchToken) {

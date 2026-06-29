@@ -9209,6 +9209,25 @@ describe('connectPanePty', () => {
       },
       '\u280b OMP'
     )
+
+    mockStoreState.tabsByWorktree = {
+      'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty' }]
+    }
+    statusHandler({
+      state: 'working',
+      prompt: 'keep the remote title',
+      agentType: 'pi'
+    })
+
+    expect(mockStoreState.setAgentStatus).toHaveBeenLastCalledWith(
+      makePaneKey('tab-1', LEAF_1),
+      {
+        state: 'working',
+        prompt: 'keep the remote title',
+        agentType: 'omp'
+      },
+      '\u280b OMP'
+    )
   })
 
   it('leaves local IPC OSC 9999 status ownership in the main runtime', async () => {

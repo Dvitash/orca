@@ -908,6 +908,7 @@ type RuntimePtyWorktreeRecord = {
   launchConfig: SleepingAgentLaunchConfig | null
   launchToken: string | null
   launchAgent: TuiAgent | null
+  foregroundAgent: TuiAgent | null
   connected: boolean
   disconnectedAt: number | null
   lastExitCode: number | null
@@ -1838,6 +1839,7 @@ export class OrcaRuntimeService {
   private resolvedWorktreeGeneration = 0
   private cloneInFlightByPath = new Map<string, Promise<void>>()
   private agentDetector: AgentDetector | null = null
+  private ptyForegroundAgentRefreshes = new Map<string, Promise<void>>()
   private _orchestrationDb: OrchestrationDb | null = null
   private messageWaitersByHandle = new Map<string, Set<MessageWaiter>>()
   // Why: mobile clients subscribe to terminal output via terminal.subscribe.
@@ -5008,6 +5010,7 @@ export class OrcaRuntimeService {
         if (agentStatus === 'idle' && prevStatus !== 'idle') {
           this.resolvePtyTuiIdleWaiters(pty, ptyId)
         }
+        this.refreshPtyForegroundAgent(ptyId)
       }
     }
 
@@ -8350,6 +8353,46 @@ export class OrcaRuntimeService {
     } catch {
       return false
     }
+  }
+
+  private refreshPtyForegroundAgent(ptyId: string): void {
+    void this.refreshPtyForegroundAgentFromController(ptyId)
+  }
+
+  private refreshPtyForegroundAgentFromController(ptyId: string): Promise<void> {
+    const pendingRefresh = this.ptyForegroundAgentRefreshes.get(ptyId)
+    if (pendingRefresh) {
+      return pendingRefresh
+    }
+    const refresh = this.loadPtyForegroundAgentFromController(ptyId).finally(() => {
+      this.ptyForegroundAgentRefreshes.delete(ptyId)
+    })
+    this.ptyForegroundAgentRefreshes.set(ptyId, refresh)
+    return refresh
+  }
+
+  private async loadPtyForegroundAgentFromController(ptyId: string): Promise<void> {
+    if (!this.ptyController) {
+      return
+    }
+    const pty = this.ptysById.get(ptyId)
+    if (!pty?.connected) {
+      return
+    }
+    let foregroundProcess: string | null
+    try {
+      foregroundProcess = await this.ptyController.getForegroundProcess(ptyId)
+    } catch {
+      return
+    }
+    const foregroundAgent = foregroundProcess
+      ? (recognizeAgentProcess(foregroundProcess)?.agent ?? null)
+      : null
+    if (pty.foregroundAgent === foregroundAgent) {
+      return
+    }
+    pty.foregroundAgent = foregroundAgent
+    this.touchMobileSessionSnapshotsForPty(ptyId)
   }
 
   private getFreshExplicitAgentStatusForHandle(handle: string): {
@@ -17204,6 +17247,7 @@ export class OrcaRuntimeService {
         launchConfig: null,
         launchToken: null,
         launchAgent: null,
+        foregroundAgent: null,
         connected: state.connected ?? true,
         disconnectedAt: state.connected === false ? Date.now() : null,
         lastExitCode: null,
@@ -17319,6 +17363,7 @@ export class OrcaRuntimeService {
           connected: true
         })
       }
+      await this.refreshPtyForegroundAgentFromController(session.id)
     }
     for (const pty of this.ptysById.values()) {
       if (!livePtyIds.has(pty.ptyId) && !this.leafExistsForPty(pty.ptyId)) {
@@ -17841,7 +17886,8 @@ export class OrcaRuntimeService {
             { title: pty.lastOscTitle, updatedAt: pty.lastOscTitleAt }
           )
         : null
-      const ownerAgent = tab.launchAgent ?? liveLeafPty?.launchAgent ?? pty?.launchAgent ?? null
+      const launchAgent = tab.launchAgent ?? liveLeafPty?.launchAgent ?? pty?.launchAgent ?? null
+      const ownerAgent = launchAgent ?? liveLeafPty?.foregroundAgent ?? pty?.foregroundAgent ?? null
       const title = normalizeCompatibleAgentTitleForOwner(
         leafTitle ?? ptyTitle ?? syncedTab?.title ?? tab.title,
         ownerAgent
@@ -17909,7 +17955,7 @@ export class OrcaRuntimeService {
         title,
         ...(tab.ptyId ? { ptyId: tab.ptyId } : {}),
         ...(tab.terminalTheme ? { terminalTheme: tab.terminalTheme } : {}),
-        ...(ownerAgent ? { launchAgent: ownerAgent } : {}),
+        ...(launchAgent ? { launchAgent } : {}),
         ...(agentStatus ?? this.buildPtyMobileAgentStatus(livePty ?? pty, tab, terminalHandle)),
         ...(tab.parentLayout ? { parentLayout: tab.parentLayout } : {}),
         ...(tab.color != null ? { color: tab.color } : {}),
@@ -17977,7 +18023,7 @@ export class OrcaRuntimeService {
       return {}
     }
     const now = pty.lastOutputAt ?? Date.now()
-    const ownerAgent = tab.launchAgent ?? pty.launchAgent ?? null
+    const ownerAgent = tab.launchAgent ?? pty.launchAgent ?? pty.foregroundAgent ?? null
     const agentType = ownerAgent ?? undefined
     return {
       agentStatus: {
