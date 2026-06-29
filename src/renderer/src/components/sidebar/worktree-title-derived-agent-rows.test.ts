@@ -76,7 +76,7 @@ describe('buildTitleDerivedAgentRows', () => {
       retained: [],
       runtimePaneTitlesByTabId: {
         'tab-1': {
-          1: '\u280b Pi'
+          1: '\u280b π - tmp'
         }
       },
       ptyIdsByTabId: { 'tab-1': ['pty-omp'] },

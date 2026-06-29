@@ -100,6 +100,8 @@ describe('Pi-compatible title detection', () => {
     ['\u280b Pi', 'omp', '\u280b OMP'],
     ['Pi ready', 'omp', 'OMP ready'],
     ['Pi - action required', 'omp', 'OMP - action required'],
+    ['π - tmp', 'omp', 'OMP ready'],
+    ['\u280b π - tmp', 'omp', '\u280b OMP'],
     ['\u280b OMP', 'pi', '\u280b Pi']
   ] as const)('normalizes %s to the authoritative %s owner', (title, owner, expectedTitle) => {
     expect(normalizeCompatibleAgentTitleForOwner(title, owner)).toBe(expectedTitle)

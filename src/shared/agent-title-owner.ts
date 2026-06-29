@@ -1,4 +1,4 @@
-import { getAgentLabel } from './agent-detection'
+import { detectAgentStatusFromTitle, getAgentLabel } from './agent-detection'
 import type { AgentStatusEntry, AgentType } from './agent-status-types'
 import {
   getSyntheticAgentTitleProfile,
@@ -11,16 +11,6 @@ type TitleProfileMatch = {
 }
 
 const COMPATIBLE_IDLE_TITLE_RE = /(?<![\w./\\-])(?:ready|idle|done)(?![\w-])/i
-
-function containsBrailleSpinner(title: string): boolean {
-  for (const char of title) {
-    const codePoint = char.codePointAt(0)
-    if (codePoint !== undefined && codePoint >= 0x2800 && codePoint <= 0x28ff) {
-      return true
-    }
-  }
-  return false
-}
 
 function getProfileForTitleLabel(label: string | null): TitleProfileMatch | null {
   if (!label) {
@@ -87,8 +77,15 @@ export function normalizeCompatibleAgentTitleForOwner(
   ) {
     return title
   }
-  if (containsBrailleSpinner(title)) {
+  const sourceStatus = detectAgentStatusFromTitle(title)
+  if (sourceStatus === 'working') {
     return `\u280b ${ownerProfile.workingLabel}`
+  }
+  if (sourceStatus === 'permission') {
+    return ownerProfile.permissionLabel
+  }
+  if (sourceStatus === 'idle') {
+    return ownerProfile.idleLabel
   }
   if (hasPermissionSuffix(title, source.profile)) {
     return ownerProfile.permissionLabel
