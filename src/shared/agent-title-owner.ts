@@ -11,6 +11,7 @@ type TitleProfileMatch = {
 }
 
 const COMPATIBLE_IDLE_TITLE_RE = /(?<![\w./\\-])(?:ready|idle|done)(?![\w-])/i
+const LEGACY_PI_COMPATIBLE_TITLE_RE = /^\s*(?:[\u2800-\u28ff]\s+)?π\s*(?:[-:]|\s)\s*.+/u
 
 function getProfileForTitleLabel(label: string | null): TitleProfileMatch | null {
   if (!label) {
@@ -21,6 +22,28 @@ function getProfileForTitleLabel(label: string | null): TitleProfileMatch | null
     if (profile.workingLabel.toLowerCase() === normalizedLabel) {
       return { profile }
     }
+  }
+  return null
+}
+
+function getProfileForTitle(title: string): TitleProfileMatch | null {
+  const labelProfile = getProfileForTitleLabel(getAgentLabel(title))
+  if (labelProfile) {
+    return labelProfile
+  }
+  if (LEGACY_PI_COMPATIBLE_TITLE_RE.test(title)) {
+    return getProfileForTitleLabel('Pi')
+  }
+  return null
+}
+
+function getSourceTitleStatus(title: string): 'working' | 'permission' | 'idle' | null {
+  const detectedStatus = detectAgentStatusFromTitle(title)
+  if (detectedStatus) {
+    return detectedStatus
+  }
+  if (LEGACY_PI_COMPATIBLE_TITLE_RE.test(title)) {
+    return 'idle'
   }
   return null
 }
@@ -70,14 +93,14 @@ export function normalizeCompatibleAgentTitleForOwner(
   if (!ownerProfile?.titleIdentityGroup) {
     return title
   }
-  const source = getProfileForTitleLabel(getAgentLabel(title))
+  const source = getProfileForTitle(title)
   if (
     !source?.profile.titleIdentityGroup ||
     source.profile.titleIdentityGroup !== ownerProfile.titleIdentityGroup
   ) {
     return title
   }
-  const sourceStatus = detectAgentStatusFromTitle(title)
+  const sourceStatus = getSourceTitleStatus(title)
   if (sourceStatus === 'working') {
     return `\u280b ${ownerProfile.workingLabel}`
   }
