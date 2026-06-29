@@ -40,6 +40,24 @@ vi.mock('@/store/selectors', () => ({
 let root: Root | null = null
 let container: HTMLDivElement | null = null
 
+type DeferredProjectNotesDocument = {
+  promise: Promise<{ content: string; filePath: string }>
+  resolve: (value: { content: string; filePath: string }) => void
+  reject: (reason: unknown) => void
+}
+
+function createDeferredProjectNotesDocument(): DeferredProjectNotesDocument {
+  let resolve!: DeferredProjectNotesDocument['resolve']
+  let reject!: DeferredProjectNotesDocument['reject']
+  const promise = new Promise<{ content: string; filePath: string }>(
+    (resolvePromise, rejectPromise) => {
+      resolve = resolvePromise
+      reject = rejectPromise
+    }
+  )
+  return { promise, resolve, reject }
+}
+
 function getTextarea(): HTMLTextAreaElement {
   const textarea = container?.querySelector('textarea')
   if (!textarea) {
@@ -136,6 +154,27 @@ describe('ProjectNotesPanel', () => {
     expect(getTextarea().getAttribute('placeholder')).toBeNull()
     expect(getTextarea().className).toContain('border-0')
     expect(getTextarea().className).toContain('focus-visible:ring-0')
+  })
+
+  it('keeps the textarea editable while notes are still opening', async () => {
+    const pendingRead = createDeferredProjectNotesDocument()
+    mocks.readProjectNotes.mockReturnValue(pendingRead.promise)
+
+    await renderPanel()
+
+    expect(getTextarea().disabled).toBe(false)
+    await editTextarea('typing before load finishes')
+    expect(getTextarea().value).toBe('typing before load finishes')
+
+    await act(async () => {
+      pendingRead.resolve({
+        content: '',
+        filePath: '/home/dvita/orca/workspaces/Verde/notes.md'
+      })
+      await Promise.resolve()
+    })
+
+    expect(getTextarea().value).toBe('typing before load finishes')
   })
 
   it('autosaves edits after the debounce delay', async () => {

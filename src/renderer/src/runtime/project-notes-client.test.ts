@@ -104,10 +104,12 @@ describe('project notes client', () => {
 
   it('creates a blank notes file when the workspace notes file is missing', async () => {
     fsPathExists.mockResolvedValue(false)
+
     await expect(readProjectNotes(localContext)).resolves.toEqual({
       content: '',
       filePath: 'C:\\Users\\dvita\\orca\\workspaces\\Verde\\notes.md'
     })
+
     expect(fsReadFile).not.toHaveBeenCalled()
     expect(fsWriteFile).toHaveBeenCalledWith({
       filePath: 'C:\\Users\\dvita\\orca\\workspaces\\Verde\\notes.md',

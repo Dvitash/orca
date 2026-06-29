@@ -81,13 +81,12 @@ export default function ProjectNotesPanel(): JSX.Element {
     [operationContext]
   )
   const [content, setContent] = useState('')
-  const [loadedOperationKey, setLoadedOperationKey] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
   const [loadError, setLoadError] = useState(false)
   const [saveError, setSaveError] = useState(false)
   const [reloadNonce, setReloadNonce] = useState(0)
   const contentRef = useRef('')
   const lastSavedContentRef = useRef('')
+  const editedDuringLoadRef = useRef(false)
   const operationContextRef = useRef<ProjectNotesOperationContext | null>(operationContext)
   const operationKeyRef = useRef<string | null>(operationKey)
   const mountedRef = useRef(true)
@@ -176,18 +175,15 @@ export default function ProjectNotesPanel(): JSX.Element {
       contentRef.current = ''
       lastSavedContentRef.current = ''
       setContent('')
-      setLoadedOperationKey(null)
-      setIsLoading(false)
       setLoadError(false)
       setSaveError(false)
       return
     }
 
     let cancelled = false
-    setIsLoading(true)
     setLoadError(false)
     setSaveError(false)
-    setLoadedOperationKey(null)
+    editedDuringLoadRef.current = false
     contentRef.current = ''
     lastSavedContentRef.current = ''
     setContent('')
@@ -197,23 +193,29 @@ export default function ProjectNotesPanel(): JSX.Element {
         if (cancelled || !mountedRef.current || operationKeyRef.current !== operationKey) {
           return
         }
-        contentRef.current = document.content
         lastSavedContentRef.current = document.content
-        setContent(document.content)
-        setLoadedOperationKey(operationKey)
-        setIsLoading(false)
+        if (!editedDuringLoadRef.current) {
+          contentRef.current = document.content
+          setContent(document.content)
+        }
         setLoadError(false)
+        if (editedDuringLoadRef.current) {
+          scheduleSave(contentRef.current)
+        }
       })
       .catch(() => {
         if (cancelled || !mountedRef.current || operationKeyRef.current !== operationKey) {
           return
         }
-        contentRef.current = ''
         lastSavedContentRef.current = ''
-        setContent('')
-        setLoadedOperationKey(operationKey)
-        setIsLoading(false)
+        if (!editedDuringLoadRef.current) {
+          contentRef.current = ''
+          setContent('')
+        }
         setLoadError(true)
+        if (editedDuringLoadRef.current) {
+          scheduleSave(contentRef.current)
+        }
       })
 
     return () => {
@@ -224,12 +226,20 @@ export default function ProjectNotesPanel(): JSX.Element {
         void saveContentForContext(operationContext, operationKey, nextContent)
       }
     }
-  }, [clearDebouncedSave, operationContext, operationKey, reloadNonce, saveContentForContext])
+  }, [
+    clearDebouncedSave,
+    operationContext,
+    operationKey,
+    reloadNonce,
+    saveContentForContext,
+    scheduleSave
+  ])
 
   const handleChange = useCallback(
     (event: ChangeEvent<HTMLTextAreaElement>): void => {
       const nextContent = event.target.value
       contentRef.current = nextContent
+      editedDuringLoadRef.current = true
       setContent(nextContent)
       setSaveError(false)
       scheduleSave(nextContent)
@@ -257,8 +267,6 @@ export default function ProjectNotesPanel(): JSX.Element {
     )
   }
 
-  const isDocumentUsable = loadedOperationKey === operationKey && !isLoading
-  const displayedContent = isDocumentUsable ? content : ''
   const footerMessage = saveError
     ? translate('auto.components.right.sidebar.ProjectNotesPanel.saveError', 'Couldn’t save notes.')
     : loadError
@@ -275,12 +283,11 @@ export default function ProjectNotesPanel(): JSX.Element {
           'auto.components.right.sidebar.ProjectNotesPanel.projectNotesLabel',
           'Project notes'
         )}
-        value={displayedContent}
+        value={content}
         onChange={handleChange}
         onBlur={handleBlur}
         spellCheck={false}
-        disabled={!isDocumentUsable}
-        className="min-h-0 flex-1 resize-none border-0 bg-transparent p-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-70"
+        className="min-h-0 flex-1 resize-none border-0 bg-transparent p-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0"
       />
       <div className="min-h-5">
         {footerMessage && (
