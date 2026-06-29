@@ -4449,19 +4449,19 @@ describe('Store', () => {
     expect(store.getUI().rightSidebarOpen).toBe(false)
   })
 
-  it('preserves explicit rightSidebarTab in persisted UI', async () => {
+  it('preserves explicit Notes rightSidebarTab in persisted UI', async () => {
     writeDataFile({
       schemaVersion: 1,
       repos: [],
       worktreeMeta: {},
       settings: {},
-      ui: { rightSidebarTab: 'checks' },
+      ui: { rightSidebarTab: 'notes' },
       githubCache: { pr: {}, issue: {} },
       workspaceSession: {}
     })
 
     const store = await createStore()
-    expect(store.getUI().rightSidebarTab).toBe('checks')
+    expect(store.getUI().rightSidebarTab).toBe('notes')
   })
 
   it('preserves explicit rightSidebarExplorerView in persisted UI', async () => {

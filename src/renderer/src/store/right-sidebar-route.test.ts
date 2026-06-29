@@ -9,6 +9,13 @@ describe('normalizeRightSidebarRoute', () => {
     })
   })
 
+  it('preserves the Notes route as a files-backed activity tab', () => {
+    expect(normalizeRightSidebarRoute('notes')).toEqual({
+      rightSidebarTab: 'notes',
+      rightSidebarExplorerView: 'files'
+    })
+  })
+
   it('still normalizes invalid tabs to Explorer files', () => {
     expect(normalizeRightSidebarRoute('missing')).toEqual({
       rightSidebarTab: 'explorer',
