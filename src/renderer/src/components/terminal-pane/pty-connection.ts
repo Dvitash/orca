@@ -139,6 +139,7 @@ import {
   normalizeCompatibleAgentTitleForOwner,
   resolveCompatibleAgentTypeForOwner
 } from '../../../../shared/agent-title-owner'
+import { recognizeAgentProcessFromCommandLine } from '../../../../shared/agent-process-recognition'
 import type { TuiAgent } from '../../../../shared/types'
 import { isWslUncPath } from '../../../../shared/wsl-paths'
 
@@ -151,6 +152,7 @@ const AGENT_TASK_COMPLETE_NOTIFICATION_MAX_WAIT_MS = 1500
 const AGENT_TASK_COMPLETE_NOTIFICATION_DETAIL_MAX_AGE_MS = 10_000
 const COMMAND_CODE_OUTPUT_DONE_SETTLE_MS = 1500
 const SSH_SHELL_READY_STARTUP_FALLBACK_MS = 1500
+const MANUAL_AGENT_COMMAND_MAX_CHARS = 4096
 const HIDDEN_OUTPUT_RESTORE_SCROLLBACK_ROWS = 5000
 const HIDDEN_OUTPUT_RESTORE_PENDING_CHARS = 512 * 1024
 const HIDDEN_OUTPUT_RESTORE_DEFERRED_RETRY_MS = 50
@@ -988,12 +990,63 @@ export function connectPanePty(
   }
   /**
    * Resolves the authoritative owner agent type for this pane, checking tab launch,
-   * pane startup, and store state configuration.
+   * pane startup, typed command ownership, and store state configuration.
    *
    * Why: launch ownership wins so Pi-compatible live titles/hooks can't repaint an
-   * OMP-owned pane back to Pi; the stored status agentType is only the last-resort
-   * fallback because it can itself be a Pi-compatible frame.
+   * OMP-owned pane back to Pi; command ownership covers manually typed `omp`
+   * in generic terminals where launch metadata does not exist.
    */
+  let commandInferredPaneAgent: TuiAgent | null = null
+  let pendingShellCommandLine = ''
+  const rememberCommandInferredPaneAgent = (): void => {
+    const commandLine = pendingShellCommandLine.trim()
+    pendingShellCommandLine = ''
+    commandInferredPaneAgent = commandLine
+      ? (recognizeAgentProcessFromCommandLine(commandLine)?.agent ?? null)
+      : null
+  }
+  const clearCommandInferredPaneAgent = (): void => {
+    commandInferredPaneAgent = null
+    pendingShellCommandLine = ''
+  }
+  const appendPendingShellCommandInput = (text: string): void => {
+    if (pendingShellCommandLine.length >= MANUAL_AGENT_COMMAND_MAX_CHARS) {
+      return
+    }
+    pendingShellCommandLine = `${pendingShellCommandLine}${text}`.slice(
+      0,
+      MANUAL_AGENT_COMMAND_MAX_CHARS
+    )
+  }
+  const observeAcceptedShellCommandInput = (data: string): void => {
+    if (commandInferredPaneAgent) {
+      return
+    }
+    if (data.includes('\x1b')) {
+      pendingShellCommandLine = ''
+      return
+    }
+    for (const char of data) {
+      if (char === '\r' || char === '\n') {
+        rememberCommandInferredPaneAgent()
+        if (commandInferredPaneAgent) {
+          return
+        }
+        continue
+      }
+      if (char === '\x7f' || char === '\b') {
+        pendingShellCommandLine = pendingShellCommandLine.slice(0, -1)
+        continue
+      }
+      if (char === '\x03' || char === '\x15') {
+        pendingShellCommandLine = ''
+        continue
+      }
+      if (char >= ' ') {
+        appendPendingShellCommandInput(char)
+      }
+    }
+  }
   const getAuthoritativePaneAgent = (): AgentType | undefined => {
     const state = useAppStore.getState()
     const tab = (state.tabsByWorktree[deps.worktreeId] ?? []).find(
@@ -1003,6 +1056,7 @@ export function connectPanePty(
       tab?.launchAgent ??
       paneStartup?.launchAgent ??
       paneStartup?.initialAgentStatus?.agent ??
+      commandInferredPaneAgent ??
       state.agentStatusByPaneKey[cacheKey]?.agentType
     )
   }
@@ -1226,6 +1280,7 @@ export function connectPanePty(
   }
   const commandLifecycle = createTerminalCommandLifecycle({
     onCommandFinished: () => {
+      clearCommandInferredPaneAgent()
       const state = useAppStore.getState()
       const entry = state.agentStatusByPaneKey[cacheKey]
       const inferenceResult = flushPendingInterruptInference()
@@ -1880,6 +1935,7 @@ export function connectPanePty(
     }
   }
   const onAgentExited = (): void => {
+    clearCommandInferredPaneAgent()
     // Why: when the terminal title reverts to a plain shell (e.g., "bash", "zsh"),
     // the agent has exited. Clear any running cache timer so the sidebar doesn't
     // show a stale countdown for a tab that no longer has an active Claude session.
@@ -2145,6 +2201,7 @@ export function connectPanePty(
         .then((accepted) => {
           if (accepted) {
             recordAcceptedTerminalInputForHibernation()
+            observeAcceptedShellCommandInput(data)
             observeAcceptedTerminalInput(data, acknowledgedIntent)
             interruptInference.observeInputIntent(acknowledgedIntent)
             observeTitleOnlyInterrupt()
@@ -2159,6 +2216,7 @@ export function connectPanePty(
     if (intent) {
       if (transport.sendInput(data)) {
         markAcceptedTerminalInputSent()
+        observeAcceptedShellCommandInput(data)
         observeAcceptedTerminalInput(data, intent)
       }
       clearPendingTerminalInputIntent()
@@ -2166,6 +2224,7 @@ export function connectPanePty(
     }
     if (transport.sendInput(data)) {
       markAcceptedTerminalInputSent()
+      observeAcceptedShellCommandInput(data)
       observeAcceptedTerminalInput(data)
       observeSentTerminalInputIntent(data)
     } else {

@@ -3238,7 +3238,7 @@ export class OrcaRuntimeService {
 
   /**
    * Publishes a PTY-backed terminal tab snapshot to the synced mobile session,
-   * normalizing Pi-compatible titles based on launch ownership.
+   * normalizing Pi-compatible titles based on launch or foreground ownership.
    */
   private publishPtyBackedMobileSessionTerminal(
     worktreeId: string,
@@ -3253,9 +3253,10 @@ export class OrcaRuntimeService {
     }
   ): void {
     const existing = this.mobileSessionTabsByWorktree.get(worktreeId)
+    const ownerAgent = pty.launchAgent ?? pty.foregroundAgent
     const title = normalizeCompatibleAgentTitleForOwner(
       args.title ?? getLatestPtyTitle(pty) ?? 'Terminal',
-      pty.launchAgent
+      ownerAgent
     )
     const existingTab = existing?.tabs.find(
       (candidate): candidate is RuntimeMobileSessionTerminalTab =>

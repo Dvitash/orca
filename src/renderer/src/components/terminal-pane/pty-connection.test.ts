@@ -586,15 +586,18 @@ describe('connectPanePty', () => {
       markWorktreeUnread: vi.fn(),
       observeTerminalGitHubPullRequestLink: vi.fn(),
       recordTerminalInput: vi.fn(),
-      setAgentStatus: vi.fn((paneKey: string, payload: Record<string, unknown>) => {
-        mockStoreState.agentStatusByPaneKey[paneKey] = {
-          ...payload,
-          paneKey,
-          updatedAt: Date.now(),
-          stateStartedAt: Date.now(),
-          stateHistory: []
+      setAgentStatus: vi.fn(
+        (paneKey: string, payload: Record<string, unknown>, terminalTitle?: string | null) => {
+          mockStoreState.agentStatusByPaneKey[paneKey] = {
+            ...payload,
+            paneKey,
+            ...(terminalTitle ? { terminalTitle } : {}),
+            updatedAt: Date.now(),
+            stateStartedAt: Date.now(),
+            stateHistory: []
+          }
         }
-      }),
+      ),
       removeAgentStatus: vi.fn(),
       dropAgentStatus: vi.fn(),
       markTerminalTabUnread: vi.fn(),
@@ -774,6 +777,84 @@ describe('connectPanePty', () => {
         number: 42
       })
     )
+  })
+
+  it('normalizes Pi-compatible remote runtime status to OMP after typed omp command', async () => {
+    const { connectPanePty } = await import('./pty-connection')
+    enableActiveRuntimeEnvironment()
+    const paneKey = makePaneKey('tab-1', LEAF_1)
+    const pane = createPane(1)
+    const transport = createMockTransport('remote:web-env-1@@pty-omp')
+    transportFactoryQueue.push(transport)
+    const manager = createManager(1, 1)
+    const deps = createDeps()
+
+    connectPanePty(pane as never, manager as never, deps as never)
+    sendTerminalInputThroughPane(pane, 'omp\r')
+    await flushAsyncTicks()
+    const onTitleChange = createdTransportOptions[0]?.onTitleChange as
+      | ((title: string, rawTitle: string) => void)
+      | undefined
+    const onAgentStatus = createdTransportOptions[0]?.onAgentStatus as
+      | ((payload: { state: 'done'; prompt: string; agentType: 'pi' }) => void)
+      | undefined
+    if (!onTitleChange || !onAgentStatus) {
+      throw new Error('missing remote PTY callbacks')
+    }
+    onTitleChange('Pi ready', 'Pi ready')
+    onAgentStatus({
+      state: 'done',
+      prompt: '',
+      agentType: 'pi'
+    })
+
+    expect(transport.sendInput).toHaveBeenCalledWith('omp\r')
+    expect(deps.setRuntimePaneTitle).toHaveBeenCalledWith('tab-1', 1, 'OMP ready')
+    expect(deps.updateTabTitle).toHaveBeenCalledWith('tab-1', 'OMP ready')
+    expect(mockStoreState.agentStatusByPaneKey[paneKey]).toMatchObject({
+      state: 'done',
+      agentType: 'omp',
+      terminalTitle: 'OMP ready'
+    })
+  })
+
+  it('keeps Pi-compatible remote runtime status as Pi after typed pi command', async () => {
+    const { connectPanePty } = await import('./pty-connection')
+    enableActiveRuntimeEnvironment()
+    const paneKey = makePaneKey('tab-1', LEAF_1)
+    const pane = createPane(1)
+    const transport = createMockTransport('remote:web-env-1@@pty-pi')
+    transportFactoryQueue.push(transport)
+    const manager = createManager(1, 1)
+    const deps = createDeps()
+
+    connectPanePty(pane as never, manager as never, deps as never)
+    sendTerminalInputThroughPane(pane, 'pi\r')
+    await flushAsyncTicks()
+    const onTitleChange = createdTransportOptions[0]?.onTitleChange as
+      | ((title: string, rawTitle: string) => void)
+      | undefined
+    const onAgentStatus = createdTransportOptions[0]?.onAgentStatus as
+      | ((payload: { state: 'done'; prompt: string; agentType: 'pi' }) => void)
+      | undefined
+    if (!onTitleChange || !onAgentStatus) {
+      throw new Error('missing remote PTY callbacks')
+    }
+    onTitleChange('Pi ready', 'Pi ready')
+    onAgentStatus({
+      state: 'done',
+      prompt: '',
+      agentType: 'pi'
+    })
+
+    expect(transport.sendInput).toHaveBeenCalledWith('pi\r')
+    expect(deps.setRuntimePaneTitle).toHaveBeenCalledWith('tab-1', 1, 'Pi ready')
+    expect(deps.updateTabTitle).toHaveBeenCalledWith('tab-1', 'Pi ready')
+    expect(mockStoreState.agentStatusByPaneKey[paneKey]).toMatchObject({
+      state: 'done',
+      agentType: 'pi',
+      terminalTitle: 'Pi ready'
+    })
   })
 
   it('queues visible bulk output off the synchronous xterm write path', async () => {

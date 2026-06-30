@@ -11668,6 +11668,80 @@ describe('OrcaRuntimeService', () => {
     expect(getForegroundProcess).toHaveBeenCalledTimes(2)
   })
 
+  it('normalizes Pi-compatible mobile session status to OMP for an unknown-launch foreground omp PTY', async () => {
+    const spawn = vi.fn().mockResolvedValue({ id: 'pty-typed-omp' })
+    const getForegroundProcess = vi.fn(async () => 'omp')
+    const runtime = new OrcaRuntimeService(store)
+    runtime.setPtyController({
+      spawn,
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess
+    })
+    const terminal = await runtime.createTerminal(`id:${TEST_WORKTREE_ID}`, {
+      tabId: 'typed-omp-tab',
+      leafId: HEADLESS_LEAF_ID,
+      title: 'Terminal'
+    })
+
+    runtime.onPtyData('pty-typed-omp', '\x1b]0;Pi ready\x07', 123)
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    const result = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+
+    expect(getForegroundProcess).toHaveBeenCalledWith('pty-typed-omp')
+    expect(result.tabs[0]).toEqual(
+      expect.objectContaining({
+        type: 'terminal',
+        title: 'OMP ready',
+        agentStatus: expect.objectContaining({
+          state: 'done',
+          agentType: 'omp',
+          terminalHandle: terminal.handle,
+          terminalTitle: 'OMP ready'
+        })
+      })
+    )
+    expect(result.tabs[0]).not.toHaveProperty('launchAgent')
+  })
+
+  it('keeps Pi-compatible mobile session status as Pi for an unknown-launch foreground pi PTY', async () => {
+    const spawn = vi.fn().mockResolvedValue({ id: 'pty-typed-pi' })
+    const getForegroundProcess = vi.fn(async () => 'pi')
+    const runtime = new OrcaRuntimeService(store)
+    runtime.setPtyController({
+      spawn,
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess
+    })
+    const terminal = await runtime.createTerminal(`id:${TEST_WORKTREE_ID}`, {
+      tabId: 'typed-pi-tab',
+      leafId: HEADLESS_LEAF_ID,
+      title: 'Terminal'
+    })
+
+    runtime.onPtyData('pty-typed-pi', '\x1b]0;Pi ready\x07', 123)
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    const result = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+
+    expect(getForegroundProcess).toHaveBeenCalledWith('pty-typed-pi')
+    expect(result.tabs[0]).toEqual(
+      expect.objectContaining({
+        type: 'terminal',
+        title: 'Pi ready',
+        agentStatus: expect.objectContaining({
+          state: 'done',
+          agentType: 'pi',
+          terminalHandle: terminal.handle,
+          terminalTitle: 'Pi ready'
+        })
+      })
+    )
+    expect(result.tabs[0]).not.toHaveProperty('launchAgent')
+  })
+
   it('keeps renderer-vetted mobile agent status for custom-titled terminals', async () => {
     const runtime = new OrcaRuntimeService(store)
     const leafId = '11111111-1111-4111-8111-111111111111'
